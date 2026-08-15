@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+Icon?
+
+# Xcode / Swift build output
+build/
+DerivedData/
+.build/
+.swiftpm/
+*.app
+*.dSYM
+*.ipa
+*.pkg
+*.xcarchive
+
+# Xcode user data
+*.xcuserstate
+*.xccheckout
+xcuserdata/
+*.xcuserdatad/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Local secrets and config
+config.json
+config.local.json
+Secrets.plist
+LocalSecrets.plist
+*.secret.json
+*.private.json
+*.env
+*.key
+*.pem
+*.p12
+*.mobileprovision
+*.cer
+*.crt
+
+# Editor noise
+*.swp
+*.swo
