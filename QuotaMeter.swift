@@ -1405,8 +1405,12 @@ struct SettingsView: View {
                 Text("Base URL")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                TextField("https://your-api.example.com", text: $baseURLString)
-                    .textFieldStyle(.roundedBorder)
+                ClipboardTextField(
+                    text: $baseURLString,
+                    isSecure: false,
+                    placeholder: "https://your-api.example.com"
+                )
+                .frame(height: 24)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("接口类型")
@@ -1424,8 +1428,12 @@ struct SettingsView: View {
                     Text("Usage Path")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    TextField("/usage", text: $usagePath)
-                        .textFieldStyle(.roundedBorder)
+                    ClipboardTextField(
+                        text: $usagePath,
+                        isSecure: false,
+                        placeholder: "/usage"
+                    )
+                    .frame(height: 24)
                         .disabled(providerPreset == .openRouter)
                 }
 
@@ -1449,7 +1457,7 @@ struct SettingsView: View {
                 }
 
                 Group {
-                    APIKeyInputField(
+                    ClipboardTextField(
                         text: $newAPIKey,
                         isSecure: !showAPIKey,
                         placeholder: "输入或粘贴新的 Key 后保存"
@@ -1547,7 +1555,7 @@ struct SettingsView: View {
     }
 }
 
-struct APIKeyInputField: NSViewRepresentable {
+struct ClipboardTextField: NSViewRepresentable {
     @Binding var text: String
     var isSecure: Bool
     var placeholder: String
@@ -1580,7 +1588,9 @@ struct APIKeyInputField: NSViewRepresentable {
     }
 
     private func makeField(context: Context) -> NSTextField {
-        let field: NSTextField = isSecure ? NSSecureTextField() : NSTextField()
+        let field: NSTextField = isSecure
+            ? ClipboardAwareSecureTextField()
+            : ClipboardAwareTextField()
         field.stringValue = text
         field.placeholderString = placeholder
         field.delegate = context.coordinator
@@ -1609,6 +1619,68 @@ struct APIKeyInputField: NSViewRepresentable {
         func controlTextDidChange(_ obj: Notification) {
             guard let field = obj.object as? NSTextField else { return }
             text = field.stringValue
+        }
+    }
+}
+
+class ClipboardAwareTextField: NSTextField {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let commandV = modifiers == .command &&
+            event.charactersIgnoringModifiers?.lowercased() == "v"
+        if commandV {
+            pasteClipboard()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    private func pasteClipboard() {
+        guard let value = NSPasteboard.general.string(forType: .string),
+              !value.isEmpty else {
+            NSSound.beep()
+            return
+        }
+
+        if let editor = currentEditor() as? NSTextView {
+            let selectedRange = editor.selectedRange
+            editor.replaceCharacters(in: selectedRange, with: value)
+            let caretLocation = selectedRange.location + (value as NSString).length
+            editor.setSelectedRange(NSRange(location: caretLocation, length: 0))
+        } else {
+            stringValue = value
+            sendAction(action, to: target)
+        }
+    }
+}
+
+final class ClipboardAwareSecureTextField: NSSecureTextField, NSTextFieldDelegate {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let commandV = modifiers == .command &&
+            event.charactersIgnoringModifiers?.lowercased() == "v"
+        if commandV {
+            pasteClipboard()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    private func pasteClipboard() {
+        guard let value = NSPasteboard.general.string(forType: .string),
+              !value.isEmpty else {
+            NSSound.beep()
+            return
+        }
+
+        if let editor = currentEditor() as? NSTextView {
+            let selectedRange = editor.selectedRange
+            editor.replaceCharacters(in: selectedRange, with: value)
+            let caretLocation = selectedRange.location + (value as NSString).length
+            editor.setSelectedRange(NSRange(location: caretLocation, length: 0))
+        } else {
+            stringValue = value
+            sendAction(action, to: target)
         }
     }
 }
