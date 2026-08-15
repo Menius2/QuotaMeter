@@ -46,13 +46,15 @@ cp config-example.json "$HOME/Library/Application Support/QuotaMeter/config.json
 
 ### Windows 版本
 
-Windows 用户可以在 GitHub Actions 构建产物中下载 `win-x64` 版本，或在安装 .NET 8 SDK 的 Windows 电脑上运行：
+Windows 用户可以在安装 .NET 8 SDK 的 Windows 电脑上运行：
 
 ```powershell
 .\windows\build.ps1
 ```
 
 生成的程序位于 `windows-dist/`。双击 `QuotaMeter.exe` 后，程序会出现在 Windows 系统托盘中。
+
+仓库还提供了 GitHub Actions 模板 `windows/windows-build.yml.example`。复制到 `.github/workflows/windows-build.yml` 后，即可让 GitHub 自动构建 `win-x64` 版本。
 
 Windows 版本的设置保存在：
 
