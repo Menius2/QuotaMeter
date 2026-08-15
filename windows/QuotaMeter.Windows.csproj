@@ -3,13 +3,21 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>QuotaMeterWindows</RootNamespace>
     <AssemblyName>QuotaMeter</AssemblyName>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PublishReadyToRun>false</PublishReadyToRun>
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\assets\app-icon.png" Link="app-icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="..\assets\app-icon.png" LogicalName="app-icon.png" />
   </ItemGroup>
 </Project>

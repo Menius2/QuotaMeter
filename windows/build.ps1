@@ -8,6 +8,8 @@ dotnet publish $Project `
   --configuration Release `
   --runtime win-x64 `
   --self-contained true `
+  -p:PublishSingleFile=true `
+  -p:IncludeNativeLibrariesForSelfExtract=true `
   --output $Output
 
 Write-Host "Built: $Output"

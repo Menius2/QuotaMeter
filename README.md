@@ -26,6 +26,13 @@ QuotaMeter 是一个桌面额度监控工具，用来查看 API 中转余额、T
 
 ## 安装
 
+### 下载 Release
+
+普通用户建议直接在 GitHub Releases 下载：
+
+- macOS：下载 `QuotaMeter-macOS-v1.0.0.dmg`
+- Windows：下载 `QuotaMeter-Windows-v1.0.0.exe`
+
 ### 方式一：从源码构建
 
 ```bash
