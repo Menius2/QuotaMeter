@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>QuotaMeterWindows</RootNamespace>
+    <AssemblyName>QuotaMeter</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\assets\app-icon.png" Link="app-icon.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -21,9 +21,17 @@ xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcworkspace/xcuserdata/
 
+# Windows / .NET build output
+**/bin/
+**/obj/
+**/windows-dist/
+*.user
+*.suo
+
 # Local secrets and config
 config.json
 config.local.json
+settings.json
 Secrets.plist
 LocalSecrets.plist
 *.secret.json

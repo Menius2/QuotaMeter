@@ -1,0 +1,33 @@
+name: Build Windows App
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish win-x64
+        run: >
+          dotnet publish windows/QuotaMeter.Windows.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output windows-dist
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuotaMeter-windows-x64
+          path: windows-dist

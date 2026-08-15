@@ -1,6 +1,7 @@
 # QuotaMeter
 
-QuotaMeter 是一个 macOS 菜单栏小工具，用来查看 API 中转余额、Token 用量、每日使用记录和限额。
+QuotaMeter 是一个桌面额度监控工具，用来查看 API 中转余额、Token 用量、每日使用记录和限额。
+项目提供 macOS 菜单栏版本和 Windows 系统托盘版本。
 
 ## 功能
 
@@ -20,6 +21,8 @@ QuotaMeter 是一个 macOS 菜单栏小工具，用来查看 API 中转余额、
 - macOS 13 或更高版本
 - Apple Silicon / Intel
 - 建议使用 Xcode 15+ 或已安装 Command Line Tools
+- Windows 10 / 11
+- Windows 版本使用 .NET 8 WinForms，并通过 Windows DPAPI 保护本机 API Key
 
 ## 安装
 
@@ -40,6 +43,24 @@ cp config-example.json "$HOME/Library/Application Support/QuotaMeter/config.json
 ```
 
 然后填写你自己的 Base URL 和 API Key。不要把 `config.json` 提交到仓库。
+
+### Windows 版本
+
+Windows 用户可以在 GitHub Actions 构建产物中下载 `win-x64` 版本，或在安装 .NET 8 SDK 的 Windows 电脑上运行：
+
+```powershell
+.\windows\build.ps1
+```
+
+生成的程序位于 `windows-dist/`。双击 `QuotaMeter.exe` 后，程序会出现在 Windows 系统托盘中。
+
+Windows 版本的设置保存在：
+
+```text
+%APPDATA%\QuotaMeter\settings.json
+```
+
+API Key 使用当前 Windows 用户的 DPAPI 加密保存。不要把这个文件复制到 GitHub 或发送给其他人。
 
 ## 使用步骤
 
@@ -81,6 +102,7 @@ xattr -dr com.apple.quarantine build/QuotaMeter.app
 ## 安全说明
 
 - API Key 默认保存在本机 Keychain
+- Windows 版本使用当前用户 DPAPI 加密保存 API Key
 - 不会额外启动后台 Helper 或登录项
 - 退出 App 后，状态栏图标和轮询都会结束
 - `config.json` 不要提交到仓库
