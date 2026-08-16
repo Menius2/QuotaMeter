@@ -119,6 +119,7 @@ enum APIProviderPreset: String, CaseIterable, Identifiable {
     case auto
     case compatible
     case openRouter
+    case deepSeek
 
     var id: String { rawValue }
 
@@ -130,6 +131,8 @@ enum APIProviderPreset: String, CaseIterable, Identifiable {
             return "兼容接口"
         case .openRouter:
             return "OpenRouter"
+        case .deepSeek:
+            return "DeepSeek"
         }
     }
 }
@@ -148,6 +151,7 @@ struct AppConfiguration: Decodable {
         return APIProviderPreset(rawValue: providerPreset)
             ?? APIProviderPreset(rawValue: providerPreset.lowercased())
             ?? (providerPreset.lowercased() == "openrouter" ? .openRouter : nil)
+            ?? (providerPreset.lowercased() == "deepseek" ? .deepSeek : nil)
     }
 
     static func load() -> AppConfiguration? {
@@ -186,7 +190,7 @@ final class QuotaStore: ObservableObject {
     @Published var baseURLString: String = ""
     @Published var refreshIntervalSeconds: Int = 30
     @Published var providerPreset: APIProviderPreset = .auto
-    @Published var usagePath: String = "/usage"
+    @Published var usagePath: String = "/v1/usage"
 
     private var apiKey: String?
     private var pollingTask: Task<Void, Never>?
@@ -225,8 +229,13 @@ final class QuotaStore: ObservableObject {
             snapshot = nil
             return
         }
-        guard let baseURL = normalisedBaseURL(baseURLString) else {
-            errorMessage = "Base URL 无效"
+        let cleanedBaseURL = sanitisedBaseURLString(baseURLString)
+        guard !cleanedBaseURL.isEmpty else {
+            errorMessage = "请输入 Base URL，例如 https://your-api.example.com"
+            return
+        }
+        guard let baseURL = normalisedBaseURL(cleanedBaseURL, providerPreset: providerPreset) else {
+            errorMessage = "Base URL 格式无效，请填写完整的 http:// 或 https:// 地址"
             return
         }
 
@@ -240,7 +249,7 @@ final class QuotaStore: ObservableObject {
                 baseURL: baseURL,
                 providerPreset: providerPreset,
                 usagePath: usagePath,
-                daysBack: 3650
+                daysBack: 90
             )
             snapshot = data
             lastUpdated = Date()
@@ -261,7 +270,7 @@ final class QuotaStore: ObservableObject {
         providerPreset: APIProviderPreset,
         usagePath: String
     ) async {
-        let trimmedBaseURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBaseURL = sanitisedBaseURLString(baseURL)
         let trimmedUsagePath = normalisedUsagePath(usagePath)
         defaults.set(trimmedBaseURL, forKey: DefaultsKey.baseURL)
         defaults.set(refreshIntervalSeconds, forKey: DefaultsKey.refreshInterval)
@@ -308,7 +317,7 @@ final class QuotaStore: ObservableObject {
 
     private func loadPersistedSettings() {
         if let storedBaseURL = defaults.string(forKey: DefaultsKey.baseURL), !storedBaseURL.isEmpty {
-            baseURLString = storedBaseURL
+            baseURLString = sanitisedBaseURLString(storedBaseURL)
             hasPersistedBaseURL = true
         }
         let interval = defaults.integer(forKey: DefaultsKey.refreshInterval)
@@ -331,8 +340,8 @@ final class QuotaStore: ObservableObject {
     private func applyConfigurationFallbacks() {
         guard let configuration else { return }
 
-        if !hasPersistedBaseURL, let baseURL = configuration.baseURL?.trimmingCharacters(in: .whitespacesAndNewlines), !baseURL.isEmpty {
-            baseURLString = baseURL
+        if !hasPersistedBaseURL, let baseURL = configuration.baseURL, !baseURL.isEmpty {
+            baseURLString = sanitisedBaseURLString(baseURL)
         }
         if !hasPersistedRefreshInterval, let interval = configuration.refreshIntervalSeconds {
             refreshIntervalSeconds = max(10, interval)
@@ -349,30 +358,70 @@ final class QuotaStore: ObservableObject {
         }
     }
 
-    private func normalisedBaseURL(_ raw: String) -> URL? {
+    private func sanitisedBaseURLString(_ raw: String) -> String {
         var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+        trimmed = trimmed.components(separatedBy: .whitespacesAndNewlines).joined()
+        trimmed = trimmed.replacingOccurrences(of: "\u{FEFF}", with: "")
+        trimmed = trimmed.replacingOccurrences(of: "\u{200B}", with: "")
+        trimmed = trimmed.replacingOccurrences(of: "：", with: ":")
+        trimmed = trimmed.replacingOccurrences(of: "／", with: "/")
+
+        if trimmed.count >= 2 &&
+           ((trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"")) ||
+            (trimmed.hasPrefix("'") && trimmed.hasSuffix("'")) ||
+            (trimmed.hasPrefix("<") && trimmed.hasSuffix(">"))) {
+            trimmed.removeFirst()
+            trimmed.removeLast()
+        }
+
+        if !trimmed.isEmpty && !trimmed.contains("://") {
+            trimmed = "https://" + trimmed
+        }
         while trimmed.hasSuffix("/") {
             trimmed.removeLast()
         }
-        if trimmed.hasSuffix("/v1") {
-            return URL(string: trimmed)
+        return trimmed
+    }
+
+    private func normalisedBaseURL(_ raw: String, providerPreset: APIProviderPreset) -> URL? {
+        let trimmed = sanitisedBaseURLString(raw)
+        guard !trimmed.isEmpty else { return nil }
+        guard var components = URLComponents(string: trimmed),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = components.host,
+              !host.isEmpty,
+              let url = components.url else {
+            return nil
         }
-        if let url = URL(string: trimmed), url.host?.localizedCaseInsensitiveContains("openrouter.ai") == true {
-            if trimmed.hasSuffix("/api") {
-                return URL(string: trimmed + "/v1")
+
+        if providerPreset == .openRouter || url.host?.localizedCaseInsensitiveContains("openrouter.ai") == true {
+            if url.path.lowercased().hasSuffix("/v1") {
+                return url
+            }
+            if url.path.lowercased().hasSuffix("/api") {
+                components.path = url.path + "/v1"
+                return components.url
             }
             if url.path.isEmpty {
-                return URL(string: trimmed + "/api/v1")
+                components.path = "/api/v1"
+                return components.url
             }
         }
-        return URL(string: trimmed + "/v1")
+
+        if providerPreset == .deepSeek || url.host?.localizedCaseInsensitiveCompare("platform.deepseek.com") == .orderedSame {
+            if url.host?.localizedCaseInsensitiveCompare("platform.deepseek.com") == .orderedSame {
+                return URL(string: "https://api.deepseek.com")
+            }
+        }
+
+        return url
     }
 
     private func normalisedUsagePath(_ raw: String) -> String {
         var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return "/usage"
+            return "/v1/usage"
         }
         if !trimmed.hasPrefix("/") {
             trimmed = "/" + trimmed
@@ -389,6 +438,7 @@ enum UsageClientError: LocalizedError {
     case unauthorized(String)
     case server(Int, String)
     case decoding(String)
+    case unsupported(String)
 
     var errorDescription: String? {
         switch self {
@@ -399,6 +449,8 @@ enum UsageClientError: LocalizedError {
         case .server(let code, let message):
             return message.isEmpty ? "请求失败 \(code)" : message
         case .decoding(let message):
+            return message
+        case .unsupported(let message):
             return message
         }
     }
@@ -412,9 +464,15 @@ enum UsageClient {
         usagePath: String,
         daysBack: Int
     ) async throws -> UsageResponse {
+        if let message = webDashboardMessage(for: baseURL) {
+            throw UsageClientError.unsupported(message)
+        }
+
         switch providerPreset {
         case .openRouter:
             return try await fetchOpenRouterUsage(apiKey: apiKey, baseURL: baseURL)
+        case .deepSeek:
+            return try await fetchDeepSeekUsage(apiKey: apiKey, baseURL: baseURL)
         case .compatible:
             return try await fetchCompatibleUsage(
                 apiKey: apiKey,
@@ -423,6 +481,9 @@ enum UsageClient {
                 daysBack: daysBack
             )
         case .auto:
+            if isDeepSeekHost(baseURL) {
+                return try await fetchDeepSeekUsage(apiKey: apiKey, baseURL: baseURL)
+            }
             do {
                 return try await fetchCompatibleUsage(
                     apiKey: apiKey,
@@ -445,11 +506,31 @@ enum UsageClient {
         usagePath: String,
         daysBack: Int
     ) async throws -> UsageResponse {
-        guard let url = usageURL(baseURL: baseURL, usagePath: usagePath, daysBack: daysBack) else {
-            throw UsageClientError.invalidURL
+        let candidates = compatibleUsageURLCandidates(
+            baseURL: baseURL,
+            usagePath: usagePath,
+            daysBack: daysBack
+        )
+        var lastError: Error?
+
+        for (index, candidateURL) in candidates.enumerated() {
+            do {
+                let (data, response) = try await sendRequest(url: candidateURL, apiKey: apiKey)
+                return try decodeUsageResponse(from: data, response: response)
+            } catch let clientError as UsageClientError {
+                lastError = clientError
+                if index < candidates.count - 1 {
+                    continue
+                }
+            } catch {
+                lastError = error
+                if index < candidates.count - 1 {
+                    continue
+                }
+            }
         }
-        let (data, response) = try await sendRequest(url: url, apiKey: apiKey)
-        return try decodeUsageResponse(from: data, response: response)
+
+        throw lastError ?? UsageClientError.invalidURL
     }
 
     private static func fetchOpenRouterUsage(apiKey: String, baseURL: URL) async throws -> UsageResponse {
@@ -460,9 +541,67 @@ enum UsageClient {
         return try decodeOpenRouterResponse(from: data, response: response)
     }
 
+    private static func fetchDeepSeekUsage(apiKey: String, baseURL: URL) async throws -> UsageResponse {
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw UsageClientError.invalidURL
+        }
+        components.path = "/user/balance"
+        components.query = nil
+        components.fragment = nil
+        guard let url = components.url else {
+            throw UsageClientError.invalidURL
+        }
+
+        let (data, response) = try await sendRequest(url: url, apiKey: apiKey)
+        guard let http = response as? HTTPURLResponse else {
+            throw UsageClientError.server(-1, "没有收到有效响应")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let message = extractMessage(from: data)
+            if http.statusCode == 401 || http.statusCode == 403 {
+                throw UsageClientError.unauthorized(message)
+            }
+            throw UsageClientError.server(http.statusCode, message)
+        }
+
+        do {
+            let payload = try makeDecoder().decode(DeepSeekBalanceResponse.self, from: data)
+            let balanceInfo = payload.balanceInfos.first(where: {
+                $0.currency.localizedCaseInsensitiveCompare("USD") == .orderedSame
+            }) ?? payload.balanceInfos.first
+            let balance = balanceInfo.flatMap { Double($0.totalBalance) }
+            guard let balanceInfo, let balance else {
+                throw UsageClientError.decoding("DeepSeek 返回中没有可识别的余额")
+            }
+
+            let currency = balanceInfo.currency.uppercased()
+            return UsageResponse(
+                balance: balance,
+                dailyUsage: nil,
+                isValid: payload.isAvailable,
+                mode: "deepseek",
+                planName: "DeepSeek API",
+                remaining: balance,
+                unit: currency,
+                usage: nil,
+                quota: nil,
+                rateLimits: nil,
+                subscription: nil,
+                expiresAt: nil,
+                daysUntilExpiry: nil,
+                modelStats: nil
+            )
+        } catch let error as UsageClientError {
+            throw error
+        } catch {
+            throw UsageClientError.decoding(error.localizedDescription)
+        }
+    }
+
     private static func sendRequest(url: URL, apiKey: String) async throws -> (Data, URLResponse) {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.timeoutInterval = 15
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         return try await URLSession.shared.data(for: request)
@@ -472,15 +611,23 @@ enum UsageClient {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
         let path = components?.path ?? ""
         let endpoint = normalisedRelativePath(usagePath)
-        components?.path = joinPaths(path, endpoint)
+        components?.path = appendPath(base: path, endpoint: endpoint)
 
         let end = QuotaDateFormatter.ymd(Date())
-        let start = QuotaDateFormatter.ymd(Calendar.current.date(byAdding: .day, value: -max(1, daysBack), to: Date()) ?? Date())
-        components?.queryItems = [
-            URLQueryItem(name: "start_date", value: start),
-            URLQueryItem(name: "end_date", value: end),
-            URLQueryItem(name: "timezone", value: TimeZone.current.identifier)
-        ]
+        let boundedDays = min(max(daysBack, 1), 90)
+        let start = QuotaDateFormatter.ymd(
+            Calendar.current.date(byAdding: .day, value: -boundedDays, to: Date()) ?? Date()
+        )
+        if endpoint.localizedCaseInsensitiveContains("usage") {
+            components?.queryItems = [
+                URLQueryItem(name: "start_date", value: start),
+                URLQueryItem(name: "end_date", value: end),
+                URLQueryItem(name: "days", value: String(boundedDays)),
+                URLQueryItem(name: "timezone", value: TimeZone.current.identifier)
+            ]
+        } else {
+            components?.query = nil
+        }
         return components?.url
     }
 
@@ -494,7 +641,7 @@ enum UsageClient {
     private static func normalisedRelativePath(_ raw: String) -> String {
         var path = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if path.isEmpty {
-            path = "/usage"
+            path = "/v1/usage"
         }
         if !path.hasPrefix("/") {
             path = "/" + path
@@ -505,6 +652,64 @@ enum UsageClient {
         return path
     }
 
+    private static func compatibleUsageURLCandidates(
+        baseURL: URL,
+        usagePath: String,
+        daysBack: Int
+    ) -> [URL] {
+        var baseURLs = [baseURL]
+        if !baseURL.path.isEmpty,
+           let rootURL = rootBaseURL(from: baseURL),
+           rootURL.absoluteString != baseURL.absoluteString {
+            baseURLs.append(rootURL)
+        }
+
+        let paths = [
+            normalisedRelativePath(usagePath),
+            "/v1/usage",
+            "/usage",
+            "/api/usage",
+            "/api/v1/usage",
+            "/v1/user/usage",
+            "/user/usage",
+            "/v1/balance",
+            "/balance",
+            "/api/balance",
+            "/user/balance",
+            "/api/user/balance"
+        ]
+        var candidates: [URL] = []
+        var seen = Set<String>()
+
+        for candidateBaseURL in baseURLs {
+            for path in paths {
+                guard let url = usageURL(
+                    baseURL: candidateBaseURL,
+                    usagePath: path,
+                    daysBack: daysBack
+                ) else {
+                    continue
+                }
+                if seen.insert(url.absoluteString).inserted {
+                    candidates.append(url)
+                }
+            }
+        }
+
+        return candidates
+    }
+
+    private static func rootBaseURL(from baseURL: URL) -> URL? {
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+
+        components.path = ""
+        components.query = nil
+        components.fragment = nil
+        return components.url
+    }
+
     private static func joinPaths(_ base: String, _ addition: String) -> String {
         let left = base.hasSuffix("/") ? String(base.dropLast()) : base
         let right = addition.hasPrefix("/") ? addition : "/" + addition
@@ -512,6 +717,22 @@ enum UsageClient {
             return right
         }
         return left + right
+    }
+
+    private static func appendPath(base: String, endpoint: String) -> String {
+        let normalisedBase = base.isEmpty
+            ? ""
+            : "/" + base.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let normalisedEndpoint = "/" + endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+        if normalisedBase.isEmpty {
+            return normalisedEndpoint
+        }
+        if normalisedEndpoint == normalisedBase ||
+           normalisedEndpoint.hasPrefix(normalisedBase + "/") {
+            return normalisedEndpoint
+        }
+        return joinPaths(normalisedBase, normalisedEndpoint)
     }
 
     private static func decodeUsageResponse(from data: Data, response: URLResponse) throws -> UsageResponse {
@@ -528,26 +749,198 @@ enum UsageClient {
         }
 
         let decoder = makeDecoder()
-        if let response = try? decoder.decode(UsageResponse.self, from: data) {
+        if let response = try? decoder.decode(UsageResponse.self, from: data),
+           hasUsageData(response) {
             return response
         }
 
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let nested = json["data"] as? [String: Any], looksLikeUsageResponse(nested) {
                 let nestedData = try JSONSerialization.data(withJSONObject: nested)
-                if let response = try? decoder.decode(UsageResponse.self, from: nestedData) {
+                if let response = try? decoder.decode(UsageResponse.self, from: nestedData),
+                   hasUsageData(response) {
                     return response
                 }
             }
             if let nested = json["result"] as? [String: Any], looksLikeUsageResponse(nested) {
                 let nestedData = try JSONSerialization.data(withJSONObject: nested)
-                if let response = try? decoder.decode(UsageResponse.self, from: nestedData) {
+                if let response = try? decoder.decode(UsageResponse.self, from: nestedData),
+                   hasUsageData(response) {
                     return response
                 }
+            }
+            if let response = flexibleUsageResponse(from: json) {
+                return response
             }
         }
 
         throw UsageClientError.decoding("无法识别接口返回格式")
+    }
+
+    private static func hasUsageData(_ response: UsageResponse) -> Bool {
+        response.balance != nil ||
+        response.remaining != nil ||
+        response.usage != nil ||
+        response.dailyUsage != nil ||
+        response.quota != nil ||
+        response.rateLimits != nil ||
+        response.subscription != nil ||
+        response.modelStats != nil ||
+        response.isValid != nil
+    }
+
+    private static func flexibleUsageResponse(from root: [String: Any]) -> UsageResponse? {
+        let payload = dictionary(root["data"]) ?? dictionary(root["result"]) ?? root
+        let quota = dictionary(payload["quota"])
+        let usage = dictionary(payload["usage"])
+        let today = dictionary(usage?["today"])
+            ?? dictionary(payload["today"])
+            ?? dictionary(payload["today_usage"])
+        let total = dictionary(usage?["total"])
+            ?? dictionary(payload["total"])
+            ?? dictionary(payload["total_usage"])
+
+        let balance = firstNumber(
+            in: payload,
+            keys: ["balance", "remaining", "remaining_balance", "credit_balance", "credits", "total_balance"]
+        ) ?? quota.flatMap {
+            firstNumber(in: $0, keys: ["remaining", "balance", "total_balance"])
+        }
+        let todayEntry = makeUsageCounter(today)
+        let totalEntry = makeUsageCounter(total)
+        let dailyUsage = makeDailyUsage(payload)
+        let isValid = boolValue(payload["is_valid"] ?? payload["valid"])
+        let hasRecognizedData = balance != nil ||
+            todayEntry != nil ||
+            totalEntry != nil ||
+            !dailyUsage.isEmpty
+
+        guard hasRecognizedData else { return nil }
+
+        let limit = quota.flatMap {
+            firstNumber(in: $0, keys: ["limit", "total", "maximum"])
+        }
+        let used = quota.flatMap {
+            firstNumber(in: $0, keys: ["used", "usage", "consumed"])
+        }
+        let remaining = quota.flatMap {
+            firstNumber(in: $0, keys: ["remaining", "balance"])
+        }
+        let quotaSummary = (limit != nil || used != nil || remaining != nil)
+            ? QuotaSummary(limit: limit, used: used, remaining: remaining)
+            : nil
+
+        return UsageResponse(
+            balance: balance,
+            dailyUsage: dailyUsage.isEmpty ? nil : dailyUsage,
+            isValid: isValid,
+            mode: stringValue(payload["mode"]) ?? "compatible",
+            planName: stringValue(payload["plan_name"] ?? payload["planName"]) ?? "兼容接口",
+            remaining: remaining ?? balance,
+            unit: stringValue(payload["unit"] ?? payload["currency"]) ?? "",
+            usage: (todayEntry != nil || totalEntry != nil)
+                ? UsageSummary(
+                    averageDurationMs: nil,
+                    rpm: nil,
+                    tpm: nil,
+                    today: todayEntry,
+                    total: totalEntry
+                )
+                : nil,
+            quota: quotaSummary,
+            rateLimits: nil,
+            subscription: nil,
+            expiresAt: nil,
+            daysUntilExpiry: nil,
+            modelStats: nil
+        )
+    }
+
+    private static func makeUsageCounter(_ object: [String: Any]?) -> UsageCounterEntry? {
+        guard let object else { return nil }
+        let entry = UsageCounterEntry(
+            actualCost: firstNumber(in: object, keys: ["actual_cost", "actualCost", "cost", "total_cost"]),
+            cacheCreationTokens: firstNumber(in: object, keys: ["cache_creation_tokens", "cacheCreationTokens"]),
+            cacheReadTokens: firstNumber(in: object, keys: ["cache_read_tokens", "cacheReadTokens"]),
+            cost: firstNumber(in: object, keys: ["cost", "actual_cost", "actualCost"]),
+            inputTokens: firstNumber(in: object, keys: ["input_tokens", "inputTokens", "prompt_tokens"]),
+            outputTokens: firstNumber(in: object, keys: ["output_tokens", "outputTokens", "completion_tokens"]),
+            requests: firstNumber(in: object, keys: ["requests", "request_count", "num_model_requests"]),
+            totalTokens: firstNumber(in: object, keys: ["total_tokens", "totalTokens", "tokens"]),
+            cacheWriteTokens: firstNumber(in: object, keys: ["cache_write_tokens", "cacheWriteTokens"])
+        )
+        return entry.actualCost != nil ||
+            entry.cacheCreationTokens != nil ||
+            entry.cacheReadTokens != nil ||
+            entry.cost != nil ||
+            entry.inputTokens != nil ||
+            entry.outputTokens != nil ||
+            entry.requests != nil ||
+            entry.totalTokens != nil ||
+            entry.cacheWriteTokens != nil
+            ? entry
+            : nil
+    }
+
+    private static func makeDailyUsage(_ payload: [String: Any]) -> [DailyUsageEntry] {
+        let rawRows = (payload["daily_usage"] as? [[String: Any]])
+            ?? (payload["dailyUsage"] as? [[String: Any]])
+            ?? (payload["records"] as? [[String: Any]])
+            ?? []
+
+        return rawRows.compactMap { row in
+            guard let date = stringValue(row["date"] ?? row["day"] ?? row["period"]) else {
+                return nil
+            }
+            return DailyUsageEntry(
+                date: date,
+                requests: firstNumber(in: row, keys: ["requests", "request_count", "num_model_requests"]),
+                inputTokens: firstNumber(in: row, keys: ["input_tokens", "inputTokens", "prompt_tokens"]),
+                outputTokens: firstNumber(in: row, keys: ["output_tokens", "outputTokens", "completion_tokens"]),
+                cacheReadTokens: firstNumber(in: row, keys: ["cache_read_tokens", "cacheReadTokens"]),
+                cacheWriteTokens: firstNumber(in: row, keys: ["cache_write_tokens", "cacheWriteTokens"]),
+                actualCost: firstNumber(in: row, keys: ["actual_cost", "actualCost", "cost"]),
+                cost: firstNumber(in: row, keys: ["cost", "actual_cost", "actualCost"]),
+                totalTokens: firstNumber(in: row, keys: ["total_tokens", "totalTokens", "tokens"])
+            )
+        }
+    }
+
+    private static func dictionary(_ value: Any?) -> [String: Any]? {
+        value as? [String: Any]
+    }
+
+    private static func firstNumber(in object: [String: Any], keys: [String]) -> Double? {
+        for key in keys {
+            if let value = numberValue(object[key]) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func numberValue(_ value: Any?) -> Double? {
+        if let number = value as? NSNumber {
+            return number.doubleValue
+        }
+        if let string = value as? String {
+            return Double(string.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return nil
+    }
+
+    private static func stringValue(_ value: Any?) -> String? {
+        value as? String
+    }
+
+    private static func boolValue(_ value: Any?) -> Bool? {
+        if let value = value as? Bool {
+            return value
+        }
+        if let value = value as? String {
+            return Bool(value)
+        }
+        return nil
     }
 
     private static func decodeOpenRouterResponse(from data: Data, response: URLResponse) throws -> UsageResponse {
@@ -605,6 +998,27 @@ enum UsageClient {
             }
         }
         return false
+    }
+
+    private static func isDeepSeekHost(_ baseURL: URL) -> Bool {
+        guard let host = baseURL.host?.lowercased() else { return false }
+        return host == "api.deepseek.com" || host == "platform.deepseek.com"
+    }
+
+    private static func webDashboardMessage(for baseURL: URL) -> String? {
+        guard let host = baseURL.host?.lowercased() else { return nil }
+        switch host {
+        case "platform.openai.com":
+            return "这是 OpenAI 网页地址，不是 API 地址。请填写 API 根地址；组织用量查询还需要 Admin API Key。"
+        case "console.anthropic.com":
+            return "这是 Anthropic 网页地址，不是 API 地址。请填写 API 根地址；组织用量查询需要 Admin API Key。"
+        case "aistudio.google.com":
+            return "这是 Google AI Studio 网页地址，不是 API 地址。普通 Gemini API Key 不能直接查询账户累计用量。"
+        case "console.groq.com":
+            return "这是 Groq 网页地址，不是 API 地址。请填写实际 API 根地址或中转站 Usage 接口。"
+        default:
+            return nil
+        }
     }
 
     private static func extractMessage(from data: Data) -> String {
@@ -699,6 +1113,18 @@ enum UsageClient {
 
     private struct OpenRouterKeyResponse: Decodable {
         let data: OpenRouterKeyData
+    }
+
+    private struct DeepSeekBalanceResponse: Decodable {
+        let isAvailable: Bool
+        let balanceInfos: [DeepSeekBalanceInfo]
+    }
+
+    private struct DeepSeekBalanceInfo: Decodable {
+        let currency: String
+        let totalBalance: String
+        let grantedBalance: String
+        let toppedUpBalance: String
     }
 
     private struct OpenRouterKeyData: Decodable {
@@ -1254,6 +1680,9 @@ struct QuotaPopoverView: View {
     }
 
     private func balanceDisplayStyle(for snapshot: UsageResponse) -> UsageDisplayStyle {
+        if snapshot.mode == "deepseek" {
+            return .credits
+        }
         let unit = snapshot.unit?.lowercased() ?? ""
         if unit.contains("credit") || snapshot.mode == "openrouter" {
             return .credits
@@ -1385,7 +1814,7 @@ struct SettingsView: View {
     @ObservedObject var store: QuotaStore
     @State private var baseURLString = ""
     @State private var providerPreset: APIProviderPreset = .auto
-    @State private var usagePath = "/usage"
+    @State private var usagePath = "/v1/usage"
     @State private var newAPIKey = ""
     @State private var showAPIKey = false
     @State private var refreshInterval = 30.0
@@ -1405,11 +1834,20 @@ struct SettingsView: View {
                 Text("Base URL")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                ClipboardTextField(
-                    text: $baseURLString,
-                    isSecure: false,
-                    placeholder: "https://your-api.example.com"
-                )
+                HStack(spacing: 8) {
+                    ClipboardTextField(
+                        text: $baseURLString,
+                        isSecure: false,
+                        placeholder: "https://your-api.example.com"
+                    )
+                    Button {
+                        pasteBaseURL()
+                    } label: {
+                        Image(systemName: "doc.on.clipboard")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("粘贴 Base URL")
+                }
                 .frame(height: 24)
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -1431,10 +1869,10 @@ struct SettingsView: View {
                     ClipboardTextField(
                         text: $usagePath,
                         isSecure: false,
-                        placeholder: "/usage"
+                        placeholder: providerPreset == .deepSeek ? "/user/balance" : "/v1/usage"
                     )
                     .frame(height: 24)
-                        .disabled(providerPreset == .openRouter)
+                        .disabled(providerPreset == .openRouter || providerPreset == .deepSeek)
                 }
 
                 HStack {
@@ -1542,6 +1980,20 @@ struct SettingsView: View {
         } else {
             statusMessage = "剪贴板里没有可粘贴的内容"
         }
+    }
+
+    private func pasteBaseURL() {
+        guard let value = NSPasteboard.general.string(forType: .string) else {
+            statusMessage = "剪贴板里没有可粘贴的内容"
+            return
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            statusMessage = "剪贴板里没有可粘贴的内容"
+            return
+        }
+        baseURLString = trimmed
+        statusMessage = "已粘贴 Base URL"
     }
 
     private func applyPastedKey(_ value: String) {

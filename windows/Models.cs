@@ -5,7 +5,7 @@ internal sealed class AppSettings
     public string BaseUrl { get; set; } = "";
     public string ApiKey { get; set; } = "";
     public string ProviderPreset { get; set; } = "auto";
-    public string UsagePath { get; set; } = "/usage";
+    public string UsagePath { get; set; } = "/v1/usage";
     public int RefreshIntervalSeconds { get; set; } = 30;
 }
 

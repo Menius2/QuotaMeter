@@ -167,11 +167,12 @@ internal sealed class MainForm : Form
         _baseUrlField.PlaceholderText = "https://your-api.example.com";
 
         _providerField.DropDownStyle = ComboBoxStyle.DropDownList;
-        _providerField.Items.AddRange(["自动", "兼容接口", "OpenRouter"]);
+        _providerField.Items.AddRange(["自动", "兼容接口", "OpenRouter", "DeepSeek"]);
+        _providerField.SelectedIndexChanged += (_, _) => UpdateProviderFieldState();
         AddRow(layout, 1, "接口类型", _providerField);
 
         _usagePathField.Dock = DockStyle.Fill;
-        _usagePathField.PlaceholderText = "/usage";
+        _usagePathField.PlaceholderText = "/v1/usage";
         AddRow(layout, 2, "Usage Path", _usagePathField);
 
         var keyPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
@@ -274,7 +275,10 @@ internal sealed class MainForm : Form
         _intervalField.Value = Math.Clamp(_settings.RefreshIntervalSeconds, 10, 3600);
         _providerField.SelectedIndex = _settings.ProviderPreset.Equals("compatible", StringComparison.OrdinalIgnoreCase)
             ? 1
-            : _settings.ProviderPreset.Equals("openRouter", StringComparison.OrdinalIgnoreCase) ? 2 : 0;
+            : _settings.ProviderPreset.Equals("openRouter", StringComparison.OrdinalIgnoreCase)
+                ? 2
+                : _settings.ProviderPreset.Equals("deepSeek", StringComparison.OrdinalIgnoreCase) ? 3 : 0;
+        UpdateProviderFieldState();
     }
 
     private void ApplyFields()
@@ -282,13 +286,14 @@ internal sealed class MainForm : Form
         _settings.BaseUrl = _baseUrlField.Text.Trim();
         _settings.ApiKey = _apiKeyField.Text.Trim();
         _settings.UsagePath = string.IsNullOrWhiteSpace(_usagePathField.Text)
-            ? "/usage"
+            ? "/v1/usage"
             : NormalizePath(_usagePathField.Text);
         _settings.RefreshIntervalSeconds = (int)_intervalField.Value;
         _settings.ProviderPreset = _providerField.SelectedIndex switch
         {
             1 => "compatible",
             2 => "openRouter",
+            3 => "deepSeek",
             _ => "auto"
         };
     }
@@ -322,6 +327,13 @@ internal sealed class MainForm : Form
         }
 
         return result.TrimEnd('/');
+    }
+
+    private void UpdateProviderFieldState()
+    {
+        var isDeepSeek = _providerField.SelectedIndex == 3;
+        _usagePathField.Enabled = !isDeepSeek;
+        _usagePathField.PlaceholderText = isDeepSeek ? "/user/balance" : "/v1/usage";
     }
 
     private static string FormatAmount(double? value, string unit)

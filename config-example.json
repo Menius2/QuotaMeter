@@ -3,6 +3,6 @@
   "base_url": "https://your-api.example.com",
   "api_key": "sk-your-api-key-here",
   "provider_preset": "auto",
-  "usage_path": "/usage",
+  "usage_path": "/v1/usage",
   "refresh_interval_seconds": 30
 }

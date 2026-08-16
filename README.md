@@ -12,7 +12,9 @@ QuotaMeter 是一个桌面额度监控工具，用来查看 API 中转余额、T
 - 显示 rate limit / quota 信息
 - 支持 OpenAI-compatible 接口
 - 支持 OpenRouter
+- 支持 DeepSeek API 余额查询
 - 支持自定义 `Usage Path`
+- 自动探测常见的 `/v1/usage`、`/usage`、`/api/usage`、`/user/usage`、`/balance` 和 `/user/balance` 路径
 - 密钥保存到本机 Keychain
 - 可选读取本地 `config.json`
 
@@ -71,6 +73,8 @@ Windows 版本的设置保存在：
 
 API Key 使用当前 Windows 用户的 DPAPI 加密保存。不要把这个文件复制到 GitHub 或发送给其他人。
 
+仓库中的 `.github/workflows/release.yml` 会在推送 `v*` 标签时自动构建 macOS DMG 和 Windows `win-x64` 单文件 EXE，并更新对应的 GitHub Release。
+
 ## 使用步骤
 
 1. 打开 QuotaMeter
@@ -81,10 +85,19 @@ API Key 使用当前 Windows 用户的 DPAPI 加密保存。不要把这个文�
 6. 需要时选择接口类型和 `Usage Path`
 7. 点击“保存并刷新”
 
+`Base URL` 要填接口根地址，不要填网页版后台页面地址，例如 `/keys` 这类管理页。
+
 ### 常见填写示例
 
-- 兼容中转：`Base URL = https://your-api.example.com`，接口类型选“兼容接口”，`Usage Path = /usage`
+- 兼容中转：`Base URL = https://your-api.example.com`，接口类型选“兼容接口”，`Usage Path = /v1/usage`
 - OpenRouter：接口类型选“OpenRouter”，`Base URL = https://openrouter.ai/api`
+- DeepSeek：`Base URL = https://api.deepseek.com`，接口类型选“DeepSeek”，API Key 使用 DeepSeek API Key
+
+DeepSeek 的 `platform.deepseek.com/usage` 是网页登录页面，不是 API 接口。QuotaMeter 对 DeepSeek 使用官方余额接口；官方 API 目前不提供与网页用量页完全对应的每日 / 累计 token 查询，因此 DeepSeek 模式主要显示余额。
+
+兼容接口会自动依次尝试用户填写的路径、`/v1/usage` 和 `/usage`。如果你的 Base URL 已经包含 `/v1`，请填写根地址或 `/v1` 均可，程序会避免生成 `/v1/v1/usage`。
+
+自动模式还会探测其他常见中转路径，但不同平台的网页后台、登录会话和管理员接口不能通过普通 API Key 通用读取。遇到网页地址时，请改填 API 根地址；遇到平台没有公开用量 API 的情况，程序会明确提示，不会把网页 HTML 当成额度数据。
 
 ## macOS 打开未签名 App
 

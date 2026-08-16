@@ -125,7 +125,7 @@ internal static class SettingsStore
         public string ProviderPreset { get; set; } = "auto";
 
         [JsonPropertyName("usage_path")]
-        public string UsagePath { get; set; } = "/usage";
+        public string UsagePath { get; set; } = "/v1/usage";
 
         [JsonPropertyName("refresh_interval_seconds")]
         public int RefreshIntervalSeconds { get; set; } = 30;
