@@ -1,0 +1,90 @@
+name: Build Release Assets
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build macOS app
+        run: bash build.sh
+
+      - name: Create DMG
+        run: |
+          mkdir -p release-assets
+          hdiutil create \
+            -volname "QuotaMeter" \
+            -srcfolder build/QuotaMeter.app \
+            -ov \
+            -format UDZO \
+            "release-assets/QuotaMeter-macOS-${GITHUB_REF_NAME}.dmg"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quotameter-macos
+          path: release-assets/QuotaMeter-macOS-*.dmg
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish Windows app
+        shell: pwsh
+        run: |
+          dotnet publish windows/QuotaMeter.Windows.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            --output windows-dist
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Copy-Item windows-dist/QuotaMeter.exe `
+            "release-assets/QuotaMeter-Windows-$env:GITHUB_REF_NAME.exe"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quotameter-windows
+          path: release-assets/QuotaMeter-Windows-*.exe
+
+  release:
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: quotameter-macos
+          path: release-assets
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: quotameter-windows
+          path: release-assets
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          overwrite_files: true
+          files: release-assets/*
