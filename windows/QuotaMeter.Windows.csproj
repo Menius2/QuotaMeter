@@ -8,9 +8,9 @@
     <Nullable>enable</Nullable>
     <RootNamespace>QuotaMeterWindows</RootNamespace>
     <AssemblyName>QuotaMeter</AssemblyName>
-    <Version>1.1.1</Version>
-    <FileVersion>1.1.1.0</FileVersion>
-    <AssemblyVersion>1.1.1.0</AssemblyVersion>
+    <Version>1.1.2</Version>
+    <FileVersion>1.1.2.0</FileVersion>
+    <AssemblyVersion>1.1.2.0</AssemblyVersion>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
@@ -19,5 +19,6 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\assets\app-icon.png" LogicalName="app-icon.png" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
   </ItemGroup>
 </Project>

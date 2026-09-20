@@ -1,5 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
+using System.Text.Json;
+using Microsoft.Web.WebView2.WinForms;
 
 namespace QuotaMeterWindows;
 
@@ -221,8 +223,57 @@ internal sealed class MainForm : Form
         };
         actions.Controls.Add(saveButton);
         actions.Controls.Add(clearButton);
+        var loginButton = MakeButton("网页登录并自动获取令牌");
+        loginButton.Click += async (_, _) => await OpenDashboardLoginAsync();
+        actions.Controls.Add(loginButton);
         AddRow(layout, 6, "", actions);
         return group;
+    }
+
+    private async Task OpenDashboardLoginAsync()
+    {
+        var host = _baseUrlField.Text.Trim();
+        var url = host.Contains("deepseek", StringComparison.OrdinalIgnoreCase)
+            ? "https://platform.deepseek.com/usage"
+            : (Uri.TryCreate(host, UriKind.Absolute, out var parsed) ? parsed.ToString() : "https://platform.openai.com");
+        using var loginWindow = new Form
+        {
+            Text = "网页登录（登录完成后自动同步用量）",
+            StartPosition = FormStartPosition.CenterParent,
+            Width = 1100,
+            Height = 760
+        };
+        var browser = new WebView2 { Dock = DockStyle.Fill };
+        loginWindow.Controls.Add(browser);
+        browser.NavigationCompleted += async (_, _) =>
+        {
+            try
+            {
+                var raw = await browser.CoreWebView2.ExecuteScriptAsync("(() => { const v = localStorage.getItem('userToken'); return v || ''; })()");
+                var value = JsonSerializer.Deserialize<string>(raw) ?? "";
+                if (string.IsNullOrWhiteSpace(value)) return;
+                using var tokenDoc = JsonDocument.Parse(value);
+                var token = tokenDoc.RootElement.ValueKind == JsonValueKind.Object && tokenDoc.RootElement.TryGetProperty("value", out var tokenValue)
+                    ? tokenValue.GetString()
+                    : value;
+                if (string.IsNullOrWhiteSpace(token)) return;
+                _platformTokenField.Text = token;
+                _settings.PlatformToken = token;
+                SettingsStore.Save(_settings);
+                SetStatus("已获取官网登录令牌，正在刷新官网用量。", Color.LightGreen);
+                await RefreshDataAsync();
+            }
+            catch (Exception error)
+            {
+                SetStatus($"网页登录令牌读取失败：{error.Message}", Color.Salmon);
+            }
+        };
+        loginWindow.Shown += async (_, _) =>
+        {
+            await browser.EnsureCoreWebView2Async();
+            browser.CoreWebView2.Navigate(url);
+        };
+        loginWindow.ShowDialog(this);
     }
 
     private Control BuildMetricsPanel()
