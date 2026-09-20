@@ -2,6 +2,7 @@
   "_comment": "Copy this file to config.json, fill in your values, and never commit config.json.",
   "base_url": "https://your-api.example.com",
   "api_key": "sk-your-api-key-here",
+  "platform_token": "",
   "provider_preset": "auto",
   "usage_path": "/v1/usage",
   "refresh_interval_seconds": 30

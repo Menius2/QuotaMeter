@@ -17,6 +17,7 @@ swiftc \
   -framework Combine \
   -framework Security \
   -framework SwiftUI \
+  -framework WebKit \
   "$ROOT_DIR/QuotaMeter.swift" \
   -o "$MACOS_DIR/QuotaMeter"
 

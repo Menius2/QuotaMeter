@@ -7,8 +7,10 @@ internal sealed class MainForm : Form
 {
     private readonly AppSettings _settings;
     private readonly UsageClient _client = new();
+    private readonly BalanceUsageTracker _balanceUsageTracker = new();
     private readonly TextBox _baseUrlField = new();
     private readonly TextBox _apiKeyField = new();
+    private readonly TextBox _platformTokenField = new();
     private readonly ComboBox _providerField = new();
     private readonly TextBox _usagePathField = new();
     private readonly NumericUpDown _intervalField = new();
@@ -68,6 +70,7 @@ internal sealed class MainForm : Form
         try
         {
             var snapshot = await _client.FetchAsync(_settings, CancellationToken.None);
+            snapshot = _balanceUsageTracker.Observe(snapshot, _settings);
             UpdateSnapshot(snapshot);
             SetStatus($"更新于 {DateTime.Now:HH:mm:ss}", Color.LightGreen);
         }
@@ -155,7 +158,7 @@ internal sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 6,
+            RowCount = 7,
             AutoSize = true
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
@@ -186,11 +189,16 @@ internal sealed class MainForm : Form
         keyPanel.Controls.Add(showKey, 1, 0);
         AddRow(layout, 3, "API Key", keyPanel);
 
+        _platformTokenField.Dock = DockStyle.Fill;
+        _platformTokenField.UseSystemPasswordChar = true;
+        _platformTokenField.PlaceholderText = "供应商 Usage / 官网访问令牌（可选）";
+        AddRow(layout, 4, "Usage 访问令牌", _platformTokenField);
+
         _intervalField.Minimum = 10;
         _intervalField.Maximum = 3600;
         _intervalField.Value = 30;
         _intervalField.Width = 100;
-        AddRow(layout, 4, "刷新间隔", _intervalField);
+        AddRow(layout, 5, "刷新间隔", _intervalField);
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
         var saveButton = MakeButton("保存并刷新");
@@ -205,13 +213,15 @@ internal sealed class MainForm : Form
         clearButton.Click += (_, _) =>
         {
             _apiKeyField.Clear();
+            _platformTokenField.Clear();
             _settings.ApiKey = "";
+            _settings.PlatformToken = "";
             SettingsStore.Save(_settings);
             SetStatus("已清除本机密钥。", Color.LightGreen);
         };
         actions.Controls.Add(saveButton);
         actions.Controls.Add(clearButton);
-        AddRow(layout, 5, "", actions);
+        AddRow(layout, 6, "", actions);
         return group;
     }
 
@@ -271,6 +281,7 @@ internal sealed class MainForm : Form
     {
         _baseUrlField.Text = _settings.BaseUrl;
         _apiKeyField.Text = _settings.ApiKey;
+        _platformTokenField.Text = _settings.PlatformToken;
         _usagePathField.Text = _settings.UsagePath;
         _intervalField.Value = Math.Clamp(_settings.RefreshIntervalSeconds, 10, 3600);
         _providerField.SelectedIndex = _settings.ProviderPreset.Equals("compatible", StringComparison.OrdinalIgnoreCase)
@@ -285,6 +296,7 @@ internal sealed class MainForm : Form
     {
         _settings.BaseUrl = _baseUrlField.Text.Trim();
         _settings.ApiKey = _apiKeyField.Text.Trim();
+        _settings.PlatformToken = _platformTokenField.Text.Trim();
         _settings.UsagePath = string.IsNullOrWhiteSpace(_usagePathField.Text)
             ? "/v1/usage"
             : NormalizePath(_usagePathField.Text);

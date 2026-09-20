@@ -47,6 +47,11 @@ internal static class SettingsStore
                 settings.ApiKey = !string.IsNullOrWhiteSpace(protectedKey)
                     ? WindowsSecretStore.Unprotect(protectedKey)
                     : plainKey ?? settings.ApiKey;
+                var protectedPlatformToken = ReadString(root, "platform_token_protected", "PlatformTokenProtected");
+                var plainPlatformToken = ReadString(root, "platform_token", "PlatformToken");
+                settings.PlatformToken = !string.IsNullOrWhiteSpace(protectedPlatformToken)
+                    ? WindowsSecretStore.Unprotect(protectedPlatformToken)
+                    : plainPlatformToken ?? settings.PlatformToken;
                 return settings;
             }
             catch
@@ -69,7 +74,10 @@ internal static class SettingsStore
             RefreshIntervalSeconds = Math.Max(10, settings.RefreshIntervalSeconds),
             ApiKeyProtected = string.IsNullOrWhiteSpace(settings.ApiKey)
                 ? ""
-                : WindowsSecretStore.Protect(settings.ApiKey.Trim())
+                : WindowsSecretStore.Protect(settings.ApiKey.Trim()),
+            PlatformTokenProtected = string.IsNullOrWhiteSpace(settings.PlatformToken)
+                ? ""
+                : WindowsSecretStore.Protect(settings.PlatformToken.Trim())
         };
 
         var json = JsonSerializer.Serialize(
@@ -132,6 +140,9 @@ internal static class SettingsStore
 
         [JsonPropertyName("api_key_protected")]
         public string ApiKeyProtected { get; set; } = "";
+
+        [JsonPropertyName("platform_token_protected")]
+        public string PlatformTokenProtected { get; set; } = "";
     }
 }
 

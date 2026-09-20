@@ -33,7 +33,7 @@ internal sealed class UsageClient
                          baseUri.Host.Equals("api.deepseek.com", StringComparison.OrdinalIgnoreCase);
         if (isDeepSeek)
         {
-            return await FetchDeepSeekAsync(baseUri, settings.ApiKey, cancellationToken);
+            return await FetchDeepSeekAsync(baseUri, settings.ApiKey, settings.PlatformToken, cancellationToken);
         }
 
         var isOpenRouter = settings.ProviderPreset.Equals("openRouter", StringComparison.OrdinalIgnoreCase) ||
@@ -48,7 +48,10 @@ internal sealed class UsageClient
             var endpoint = endpoints[index];
             try
             {
-                return await FetchSnapshotAsync(endpoint, settings.ApiKey, isOpenRouter, cancellationToken);
+                var credential = isOpenRouter || string.IsNullOrWhiteSpace(settings.PlatformToken)
+                    ? settings.ApiKey
+                    : settings.PlatformToken;
+                return await FetchSnapshotAsync(endpoint, credential, isOpenRouter, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -114,6 +117,7 @@ internal sealed class UsageClient
     private static async Task<UsageSnapshot> FetchDeepSeekAsync(
         Uri baseUri,
         string apiKey,
+        string platformToken,
         CancellationToken cancellationToken)
     {
         var endpoint = new UriBuilder(baseUri)
@@ -172,7 +176,7 @@ internal sealed class UsageClient
                 throw new RequestFailedException(null, "DeepSeek 返回中没有可识别的余额。");
             }
 
-            return new UsageSnapshot
+            var balanceSnapshot = new UsageSnapshot
             {
                 Balance = balance,
                 Unit = currency.ToUpperInvariant(),
@@ -180,12 +184,179 @@ internal sealed class UsageClient
                 PlanName = "DeepSeek API",
                 IsValid = available ?? true
             };
+            if (!string.IsNullOrWhiteSpace(platformToken))
+            {
+                var platformSnapshot = await FetchDeepSeekPlatformAsync(balanceSnapshot, platformToken, cancellationToken);
+                if (platformSnapshot is not null)
+                {
+                    return platformSnapshot;
+                }
+            }
+            return balanceSnapshot;
         }
         catch (JsonException ex)
         {
             throw new RequestFailedException(null, "无法识别 DeepSeek 返回格式。", ex);
         }
     }
+
+    private static async Task<UsageSnapshot?> FetchDeepSeekPlatformAsync(
+        UsageSnapshot balance,
+        string platformToken,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var start = now.ToUnixTimeSeconds() - 10L * 365 * 24 * 60 * 60;
+        var end = now.ToUnixTimeSeconds();
+        var tz = (int)TimeZoneInfo.Local.GetUtcOffset(DateTime.Now).TotalSeconds;
+        var query = $"start={start}&end={end}&tz={tz}";
+        var amount = await SendPlatformJsonAsync(
+            new Uri($"https://platform.deepseek.com/api/v0/usage/by_api_key/amount?{query}"),
+            platformToken,
+            cancellationToken);
+        JsonDocument? cost = null;
+        try
+        {
+            cost = await SendPlatformJsonAsync(
+                new Uri($"https://platform.deepseek.com/api/v0/usage/by_api_key/cost?{query}"),
+                platformToken,
+                cancellationToken);
+        }
+        catch (RequestFailedException)
+        {
+            // Token usage remains useful if the optional cost endpoint changes.
+        }
+
+        var rows = new Dictionary<string, PlatformAccumulator>(StringComparer.Ordinal);
+        var amountData = GetObject(GetObject(amount.RootElement, "data"), "biz_data", "bizData") ??
+                         GetObject(amount.RootElement, "data") ?? amount.RootElement;
+        var series = GetArray(amountData, "series");
+        if (series is not null)
+        {
+            foreach (var modelSeries in series.Value.EnumerateArray())
+            {
+                var buckets = GetArray(modelSeries, "buckets");
+                if (buckets is null) continue;
+                foreach (var bucket in buckets.Value.EnumerateArray())
+                {
+                    var usage = GetObject(bucket, "usage");
+                    var date = PlatformDate(bucket, "time", "timestamp");
+                    if (usage is null || date is null) continue;
+                    var hit = GetNumber(usage.Value, "PROMPT_CACHE_HIT_TOKEN", "prompt_cache_hit_tokens") ?? 0;
+                    var miss = GetNumber(usage.Value, "PROMPT_CACHE_MISS_TOKEN", "prompt_cache_miss_tokens") ?? 0;
+                    var output = GetNumber(usage.Value, "RESPONSE_TOKEN", "response_tokens", "output_tokens") ?? 0;
+                    var requests = GetNumber(usage.Value, "REQUEST", "requests", "request_count") ?? 0;
+                    if (!rows.TryGetValue(date, out var row)) row = new PlatformAccumulator();
+                    row.InputTokens += hit + miss;
+                    row.CacheReadTokens += hit;
+                    row.OutputTokens += output;
+                    row.TotalTokens += hit + miss + output;
+                    row.Requests += requests;
+                    rows[date] = row;
+                }
+            }
+        }
+
+        if (cost is not null)
+        {
+            var costData = GetObject(cost.RootElement, "data");
+            costData = GetObject(costData, "biz_data", "bizData") ?? costData;
+            var currencies = GetArray(costData, "data");
+            var costSeries = currencies is not null && currencies.Value.GetArrayLength() > 0
+                ? GetArray(currencies.Value[0], "series")
+                : null;
+            if (costSeries is not null)
+            {
+                foreach (var modelSeries in costSeries.Value.EnumerateArray())
+                {
+                    var buckets = GetArray(modelSeries, "buckets");
+                    if (buckets is null) continue;
+                    foreach (var bucket in buckets.Value.EnumerateArray())
+                    {
+                        var date = PlatformDate(bucket, "time", "timestamp");
+                        var value = GetNumber(bucket, "cost", "amount");
+                        if (date is null || !value.HasValue) continue;
+                        if (!rows.TryGetValue(date, out var row)) row = new PlatformAccumulator();
+                        row.Cost += value.Value;
+                        rows[date] = row;
+                    }
+                }
+            }
+        }
+
+        if (rows.Count == 0) return null;
+        var today = DateTime.Now.ToString("yyyy-MM-dd");
+        rows.TryGetValue(today, out var todayRow);
+        todayRow ??= new PlatformAccumulator();
+        var total = new PlatformAccumulator();
+        foreach (var row in rows.Values)
+        {
+            total.InputTokens += row.InputTokens;
+            total.OutputTokens += row.OutputTokens;
+            total.TotalTokens += row.TotalTokens;
+            total.Requests += row.Requests;
+            total.CacheReadTokens += row.CacheReadTokens;
+            total.Cost += row.Cost;
+        }
+        var daily = rows.OrderByDescending(item => item.Key).Take(90).Select(item => new DailyUsageRow
+        {
+            Date = item.Key,
+            Requests = item.Value.Requests,
+            InputTokens = item.Value.InputTokens,
+            OutputTokens = item.Value.OutputTokens,
+            TotalTokens = item.Value.TotalTokens,
+            Cost = item.Value.Cost
+        }).ToList();
+        return new UsageSnapshot
+        {
+            Balance = balance.Balance,
+            TodayAmount = todayRow.Cost,
+            TotalAmount = total.Cost,
+            TodayTokens = todayRow.TotalTokens,
+            TotalTokens = total.TotalTokens,
+            TodayRequests = todayRow.Requests,
+            TotalRequests = total.Requests,
+            Unit = balance.Unit,
+            Mode = "deepseek-platform",
+            PlanName = "DeepSeek API（官网同步）",
+            IsValid = balance.IsValid,
+            DailyUsage = daily
+        };
+    }
+
+    private static async Task<JsonDocument> SendPlatformJsonAsync(Uri endpoint, string token, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Add("x-client-platform", "web");
+        using var response = await Client.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new RequestFailedException((int)response.StatusCode, ExtractMessage(body));
+        }
+        return JsonDocument.Parse(body);
+    }
+
+    private static string? PlatformDate(JsonElement value, params string[] names)
+    {
+        var timestamp = GetNumber(value, names);
+        return timestamp.HasValue
+            ? DateTimeOffset.FromUnixTimeSeconds((long)timestamp.Value).ToLocalTime().ToString("yyyy-MM-dd")
+            : null;
+    }
+
+    private sealed class PlatformAccumulator
+    {
+        public double InputTokens;
+        public double OutputTokens;
+        public double TotalTokens;
+        public double Requests;
+        public double CacheReadTokens;
+        public double Cost;
+    }
+
 
     private static bool TryCreateBaseUri(string raw, out Uri baseUri)
     {
@@ -265,6 +436,11 @@ internal sealed class UsageClient
             "/api/v1/usage",
             "/v1/user/usage",
             "/user/usage",
+            "/v1/account/usage",
+            "/account/usage",
+            "/billing/usage",
+            "/v1/dashboard/billing/usage",
+            "/v1/organization/usage/completions",
             "/v1/balance",
             "/balance",
             "/api/balance",
@@ -291,6 +467,11 @@ internal sealed class UsageClient
 
     private static Uri BuildCompatibleUri(Uri baseUri, string usagePath)
     {
+        if (Uri.TryCreate(usagePath, UriKind.Absolute, out var absolute) &&
+            absolute.Scheme is "http" or "https")
+        {
+            return absolute;
+        }
         var path = AppendPath(baseUri.AbsolutePath, NormalizePath(usagePath));
         const int days = 90;
         var startDate = DateTime.Now.Date.AddDays(-days).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -410,10 +591,16 @@ internal sealed class UsageClient
             throw new RequestFailedException(null, "无法识别接口返回格式。");
         }
 
-        var quota = GetObject(data, "quota");
-        var usage = GetObject(data, "usage");
-        var today = usage is { } usageObject ? GetObject(usageObject, "today") : null;
-        var total = usage is { } totalObject ? GetObject(totalObject, "total") : null;
+        var quota = GetObject(data, "quota", "limits", "credit");
+        var usage = GetObject(data, "usage", "usage_summary", "usageSummary");
+        var today = usage is { } usageObject
+            ? GetObject(usageObject, "today", "daily", "current_day")
+            : null;
+        today ??= GetObject(data, "today", "today_usage", "todayUsage");
+        var total = usage is { } totalObject
+            ? GetObject(totalObject, "total", "all_time", "allTime", "cumulative")
+            : null;
+        total ??= GetObject(data, "total", "total_usage", "totalUsage", "cumulative_usage", "cumulativeUsage");
 
         var balance = GetNumber(
                           data,
@@ -422,49 +609,68 @@ internal sealed class UsageClient
                           "remaining_balance",
                           "credit_balance",
                           "credits",
-                          "total_balance"
+                          "total_balance",
+                          "available_balance",
+                          "available_credit",
+                          "available_credits"
                       ) ??
                       (quota is { } quotaObject
-                          ? GetNumber(quotaObject, "remaining", "balance", "total_balance")
+                          ? GetNumber(quotaObject, "remaining", "balance", "total_balance", "available_balance")
                           : null);
         var todayTokens = today is { } todayObject
-            ? GetNumber(todayObject, "total_tokens", "totalTokens", "tokens")
+            ? GetNumber(todayObject, "total_tokens", "totalTokens", "tokens", "token_count", "total_token_count", "tokens_used")
             : null;
         var totalTokens = total is { } totalObjectValue
-            ? GetNumber(totalObjectValue, "total_tokens", "totalTokens", "tokens")
+            ? GetNumber(totalObjectValue, "total_tokens", "totalTokens", "tokens", "token_count", "total_token_count", "tokens_used")
             : null;
         var todayAmount = today is { } todayAmountObject
-            ? GetNumber(todayAmountObject, "actual_cost", "actualCost", "cost", "total_cost") ?? todayTokens
+            ? GetNumber(todayAmountObject, "actual_cost", "actualCost", "cost", "total_cost", "amount", "spent", "usage_amount") ?? todayTokens
             : null;
         var totalAmount = total is { } totalAmountObject
-            ? GetNumber(totalAmountObject, "actual_cost", "actualCost", "cost", "total_cost") ?? totalTokens
+            ? GetNumber(totalAmountObject, "actual_cost", "actualCost", "cost", "total_cost", "amount", "spent", "usage_amount") ?? totalTokens
             : null;
+        var dailyRows = ParseDailyUsage(data);
+        var derivedToday = AggregateDaily(dailyRows.Where(row => row.Date == DateTime.Now.ToString("yyyy-MM-dd")));
+        var derivedTotal = AggregateDaily(dailyRows);
 
         return new UsageSnapshot
         {
             Balance = balance,
-            TodayAmount = todayAmount,
-            TotalAmount = totalAmount,
-            TodayTokens = todayTokens,
-            TotalTokens = totalTokens,
+            TodayAmount = todayAmount ?? derivedToday.Cost,
+            TotalAmount = totalAmount ?? derivedTotal.Cost,
+            TodayTokens = todayTokens ?? derivedToday.TotalTokens,
+            TotalTokens = totalTokens ?? derivedTotal.TotalTokens,
             TodayRequests = today is { } todayRequests
-                ? GetNumber(todayRequests, "requests", "request_count", "num_model_requests")
-                : null,
+                ? GetNumber(todayRequests, "requests", "request_count", "requests_count", "num_model_requests", "api_calls", "calls")
+                : derivedToday.Requests,
             TotalRequests = total is { } totalRequests
-                ? GetNumber(totalRequests, "requests", "request_count", "num_model_requests")
-                : null,
-            Unit = GetString(data, "unit") ?? "",
-            Mode = GetString(data, "mode") ?? "",
-            PlanName = GetString(data, "plan_name", "planName") ?? "兼容接口",
-            IsValid = GetBool(data, "is_valid", "isValid"),
-            DailyUsage = ParseDailyUsage(data)
+                ? GetNumber(totalRequests, "requests", "request_count", "requests_count", "num_model_requests", "api_calls", "calls")
+                : derivedTotal.Requests,
+            Unit = GetString(data, "unit", "currency", "currency_code") ?? "",
+            Mode = GetString(data, "mode", "provider", "provider_name") ?? "",
+            PlanName = GetString(data, "plan_name", "planName", "plan", "label") ?? "兼容接口",
+            IsValid = GetBool(data, "is_valid", "isValid", "valid", "available", "is_available"),
+            DailyUsage = dailyRows
+        };
+    }
+
+    private static DailyUsageRow AggregateDaily(IEnumerable<DailyUsageRow> rows)
+    {
+        var list = rows.ToList();
+        return new DailyUsageRow
+        {
+            Requests = list.Any(row => row.Requests.HasValue) ? list.Sum(row => row.Requests ?? 0) : null,
+            InputTokens = list.Any(row => row.InputTokens.HasValue) ? list.Sum(row => row.InputTokens ?? 0) : null,
+            OutputTokens = list.Any(row => row.OutputTokens.HasValue) ? list.Sum(row => row.OutputTokens ?? 0) : null,
+            TotalTokens = list.Any(row => row.TotalTokens.HasValue) ? list.Sum(row => row.TotalTokens ?? 0) : null,
+            Cost = list.Any(row => row.Cost.HasValue) ? list.Sum(row => row.Cost ?? 0) : null
         };
     }
 
     private static List<DailyUsageRow> ParseDailyUsage(JsonElement data)
     {
         var rows = new List<DailyUsageRow>();
-        if (!TryGet(data, out var daily, "daily_usage", "dailyUsage", "records") ||
+        if (!TryGet(data, out var daily, "daily_usage", "dailyUsage", "records", "daily", "items") ||
             daily.ValueKind != JsonValueKind.Array)
         {
             return rows;
@@ -479,12 +685,12 @@ internal sealed class UsageClient
 
             rows.Add(new DailyUsageRow
             {
-                Date = GetString(item, "date", "day", "period") ?? "",
-                Requests = GetNumber(item, "requests", "request_count", "num_model_requests"),
-                InputTokens = GetNumber(item, "input_tokens", "inputTokens", "prompt_tokens"),
-                OutputTokens = GetNumber(item, "output_tokens", "outputTokens", "completion_tokens"),
-                TotalTokens = GetNumber(item, "total_tokens", "totalTokens", "tokens"),
-                Cost = GetNumber(item, "actual_cost", "actualCost", "cost")
+                Date = GetDateString(item, "date", "day", "period", "start_date", "startDate", "start_time", "startTime", "timestamp") ?? "",
+                Requests = GetNumber(item, "requests", "request_count", "requests_count", "num_model_requests", "api_calls", "calls"),
+                InputTokens = GetNumber(item, "input_tokens", "inputTokens", "prompt_tokens", "prompt_token_count", "input_token_count"),
+                OutputTokens = GetNumber(item, "output_tokens", "outputTokens", "completion_tokens", "generated_tokens", "output_token_count"),
+                TotalTokens = GetNumber(item, "total_tokens", "totalTokens", "tokens", "token_count", "total_token_count", "tokens_used"),
+                Cost = GetNumber(item, "actual_cost", "actualCost", "cost", "amount", "spent")
             });
         }
 
@@ -503,11 +709,15 @@ internal sealed class UsageClient
                    "credit_balance",
                    "credits",
                    "total_balance",
+                   "available_balance",
+                   "available_credit",
                    "quota",
                    "usage",
                    "daily_usage",
                    "dailyUsage",
-                   "records"
+                   "records",
+                   "today_usage",
+                   "total_usage"
                ));
     }
 
@@ -517,6 +727,19 @@ internal sealed class UsageClient
             ? result
             : null;
     }
+
+    private static JsonElement? GetObject(JsonElement? value, params string[] names) =>
+        value.HasValue ? GetObject(value.Value, names) : null;
+
+    private static JsonElement? GetArray(JsonElement value, params string[] names)
+    {
+        return TryGet(value, out var result, names) && result.ValueKind == JsonValueKind.Array
+            ? result
+            : null;
+    }
+
+    private static JsonElement? GetArray(JsonElement? value, params string[] names) =>
+        value.HasValue ? GetArray(value.Value, names) : null;
 
     private static string? GetString(JsonElement value, params string[] names)
     {
@@ -538,6 +761,17 @@ internal sealed class UsageClient
         }
 
         return bool.TryParse(result.ToString(), out var parsed) ? parsed : null;
+    }
+
+    private static string? GetDateString(JsonElement value, params string[] names)
+    {
+        if (!TryGet(value, out var result, names)) return null;
+        if (result.ValueKind == JsonValueKind.String) return result.GetString();
+        if (GetNumber(value, names) is { } timestamp)
+        {
+            return DateTimeOffset.FromUnixTimeSeconds((long)timestamp).ToLocalTime().ToString("yyyy-MM-dd");
+        }
+        return null;
     }
 
     private static double? GetNumber(JsonElement value, params string[] names)
@@ -581,11 +815,27 @@ internal sealed class UsageClient
             {
                 return true;
             }
+
+            if (value.ValueKind == JsonValueKind.Object)
+            {
+                var normalizedName = NormalizeFieldName(name);
+                foreach (var property in value.EnumerateObject())
+                {
+                    if (NormalizeFieldName(property.Name).Equals(normalizedName, StringComparison.Ordinal))
+                    {
+                        result = property.Value;
+                        return true;
+                    }
+                }
+            }
         }
 
         result = default;
         return false;
     }
+
+    private static string NormalizeFieldName(string value) =>
+        string.Concat(value.Where(char.IsLetterOrDigit)).ToLowerInvariant();
 
     private static string ExtractMessage(string body)
     {
