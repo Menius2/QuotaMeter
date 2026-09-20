@@ -205,10 +205,13 @@ internal sealed class UsageClient
         string platformToken,
         CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow;
-        var start = now.ToUnixTimeSeconds() - 10L * 365 * 24 * 60 * 60;
-        var end = now.ToUnixTimeSeconds();
         var tz = (int)TimeZoneInfo.Local.GetUtcOffset(DateTime.Now).TotalSeconds;
+        var now = DateTimeOffset.UtcNow;
+        var day = 24L * 60 * 60;
+        var shiftedNow = now.ToUnixTimeSeconds() + tz;
+        var todayStart = (shiftedNow / day) * day - tz;
+        var end = todayStart + day;
+        var start = end - 30L * day;
         var query = $"start={start}&end={end}&tz={tz}";
         var amount = await SendPlatformJsonAsync(
             new Uri($"https://platform.deepseek.com/api/v0/usage/by_api_key/amount?{query}"),
@@ -336,7 +339,21 @@ internal sealed class UsageClient
         {
             throw new RequestFailedException((int)response.StatusCode, ExtractMessage(body));
         }
-        return JsonDocument.Parse(body);
+        var document = JsonDocument.Parse(body);
+        var data = GetObject(document.RootElement, "data");
+        var businessCode = data is { } dataValue ? GetNumber(dataValue, "biz_code", "bizCode") : null;
+        if (businessCode.HasValue && businessCode.Value != 0)
+        {
+            var message = data is { } messageData
+                ? GetString(messageData, "biz_msg", "bizMsg", "message")
+                : null;
+            document.Dispose();
+            throw new RequestFailedException((int)businessCode.Value,
+                string.IsNullOrWhiteSpace(message)
+                    ? $"DeepSeek 平台用量接口错误：{(int)businessCode.Value}"
+                    : message);
+        }
+        return document;
     }
 
     private static string? PlatformDate(JsonElement value, params string[] names)
