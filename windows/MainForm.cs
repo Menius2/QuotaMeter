@@ -1,470 +1,280 @@
-using System.Drawing;
-using System.Windows.Forms;
-using System.Text.Json;
-using Microsoft.Web.WebView2.WinForms;
+using System.Drawing.Drawing2D;
 
 namespace QuotaMeterWindows;
 
 internal sealed class MainForm : Form
 {
-    private readonly AppSettings _settings;
+    private AppSettings _settings;
     private readonly UsageClient _client = new();
-    private readonly BalanceUsageTracker _balanceUsageTracker = new();
-    private readonly TextBox _baseUrlField = new();
-    private readonly TextBox _apiKeyField = new();
-    private readonly TextBox _platformTokenField = new();
-    private readonly ComboBox _providerField = new();
-    private readonly TextBox _usagePathField = new();
-    private readonly NumericUpDown _intervalField = new();
-    private readonly Label _balanceValue = MetricValue();
-    private readonly Label _todayValue = MetricValue();
-    private readonly Label _totalValue = MetricValue();
-    private readonly Label _requestsValue = MetricValue();
-    private readonly Label _statusLabel = new();
-    private readonly ListView _dailyList = new();
+    private readonly BalanceUsageTracker _tracker = new();
+    private readonly DashboardPanel _dashboard = new() { Dock = DockStyle.Fill };
+    private readonly Panel _header = new() { Dock = DockStyle.Top, Height = 60, Padding = new Padding(18, 10, 18, 0) };
     private readonly System.Windows.Forms.Timer _timer = new();
+    private readonly ToolTip _tips = new();
+    private CancellationTokenSource? _refresh;
+    private SettingsForm? _settingsForm;
+    private UsageSnapshot? _snapshot;
+    private DateTime? _lastUpdated;
+    private string _message = "";
+    private bool _error;
     private bool _allowClose;
-    private bool _isRefreshing;
+    private int _generation;
+    private readonly bool _preview;
+    private Bitmap? _backdrop;
+    private bool _loaded;
+    public event EventHandler? QuitRequested;
 
-    public MainForm(AppSettings settings)
+    public MainForm(AppSettings settings, bool preview = false)
     {
-        _settings = settings;
+        SuspendLayout();
+        _settings = settings.Copy();
+        _preview = preview;
         Text = "QuotaMeter";
         Icon = IconLoader.Load();
-        StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(640, 620);
-        ClientSize = new Size(760, 700);
-        Font = new Font("Segoe UI", 10);
-        BackColor = Color.FromArgb(39, 36, 34);
-        ForeColor = Color.WhiteSmoke;
-
-        BuildInterface();
-        LoadSettingsIntoFields();
-
+        AutoScaleDimensions = new SizeF(96, 96);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        Font = new Font("Microsoft YaHei UI", 9);
+        BackColor = Color.FromArgb(28, 28, 28);
+        ForeColor = DashboardPanel.Ink;
+        ShowInTaskbar = false;
+        FormBorderStyle = FormBorderStyle.None;
+        MinimizeBox = false;
+        MaximizeBox = false;
+        MinimumSize = new Size(360, 300);
+        ClientSize = new Size(440, 610);
+        StartPosition = FormStartPosition.Manual;
+        Controls.Add(_dashboard);
+        _dashboard.PaintBackdrop = PaintBackdrop;
+        _header.BackColor = Color.Transparent;
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 132, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        var refresh = HeaderButton("↻", "刷新");
+        refresh.Click += async (_, _) => await RefreshDataAsync();
+        var settingsButton = HeaderButton("⚙", "设置");
+        settingsButton.Click += (_, _) => OpenSettings();
+        var quit = HeaderButton("⏻", "退出");
+        quit.Click += (_, _) => QuitRequested?.Invoke(this, EventArgs.Empty);
+        actions.Controls.AddRange([refresh, settingsButton, quit]);
+        var title = new HeaderTitleLabel { Text = "API 额度", Dock = DockStyle.Fill, AutoSize = false,
+            TextAlign = ContentAlignment.MiddleLeft, Font = new Font(Font.FontFamily, 19, FontStyle.Bold) };
+        _header.Controls.Add(title);
+        _header.Controls.Add(actions);
+        Controls.Add(_header);
         _timer.Tick += async (_, _) => await RefreshDataAsync();
-        _timer.Interval = Math.Max(10, _settings.RefreshIntervalSeconds) * 1000;
+        SetInterval();
+        Shown += async (_, _) =>
+        {
+            if (_preview) return;
+            _timer.Start();
+            await RefreshDataAsync();
+        };
+        Deactivate += (_, _) =>
+        {
+            if (_preview || _allowClose || IsDisposed || !IsHandleCreated || _settingsForm is { Visible: true }) return;
+            BeginInvoke(() => { if (!IsDisposed && !ContainsFocus && _settingsForm is not { Visible: true }) Hide(); });
+        };
+        AutoScaleDimensions = new SizeF(96, 96);
+        ResumeLayout(true);
+        Render();
+    }
+
+    private Button HeaderButton(string text, string description)
+    {
+        var button = new HeaderActionButton(description) { Width = 38, Height = 38, Margin = new Padding(0, 0, 6, 0),
+            FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(23, 38, 56), ForeColor = Color.White,
+            Font = new Font("Segoe UI Symbol", 17), AccessibleName = description, Cursor = Cursors.Hand };
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.BorderColor = Color.FromArgb(101, 130, 160);
+        button.FlatAppearance.MouseOverBackColor = Color.FromArgb(38, 69, 99);
+        button.FlatAppearance.MouseDownBackColor = Color.FromArgb(12, 23, 37);
+        _tips.SetToolTip(button, description);
+        return button;
+    }
+
+    public void ShowAtTray()
+    {
+        var area = Screen.FromPoint(Cursor.Position).WorkingArea;
+        var margin = (int)(12 * DeviceDpi / 96f);
+        Height = Math.Min(Height, area.Height - margin * 2);
+        Width = Math.Min(Width, area.Width - margin * 2);
+        Location = new Point(area.Right - Width - margin, area.Bottom - Height - margin);
+        Show();
+        Activate();
+    }
+
+    public void OpenSettings()
+    {
+        if (_settingsForm is { IsDisposed: false }) { _settingsForm.Show(); _settingsForm.Activate(); return; }
+        _settingsForm = new SettingsForm(_settings, CommitSettings);
+        _settingsForm.Show(this);
+    }
+
+    private void CommitSettings(AppSettings next)
+    {
+        // Only committed settings are used by the timer. Ignore stale responses from the old account.
+        _generation++;
+        _refresh?.Cancel();
+        _refresh = null;
+        _settings = next.Copy();
+        _snapshot = null;
+        _lastUpdated = null;
+        SetInterval();
         _timer.Start();
-        Shown += async (_, _) => await RefreshDataAsync();
+        _ = RefreshDataAsync();
     }
 
     public async Task RefreshDataAsync()
     {
-        if (_isRefreshing)
+        if (_preview || _refresh != null) return;
+        if (string.IsNullOrWhiteSpace(_settings.ApiKey) || string.IsNullOrWhiteSpace(_settings.BaseUrl))
         {
+            _message = "先在设置里填写服务商地址和 API Key";
+            _error = false;
+            _snapshot = null;
+            _lastUpdated = null;
+            _timer.Stop();
+            Render();
             return;
         }
-
-        ApplyFields();
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-        {
-            SetStatus("请先输入 API Key。", Color.Khaki);
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(_settings.BaseUrl))
-        {
-            SetStatus("请先输入 Base URL。", Color.Khaki);
-            return;
-        }
-
-        _isRefreshing = true;
-        SetStatus("正在刷新...", Color.LightGray);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        _refresh = cancellation;
+        var generation = _generation;
+        var settings = _settings.Copy();
+        Render();
         try
         {
-            var snapshot = await _client.FetchAsync(_settings, CancellationToken.None);
-            snapshot = _balanceUsageTracker.Observe(snapshot, _settings);
-            UpdateSnapshot(snapshot);
-            SetStatus($"更新于 {DateTime.Now:HH:mm:ss}", Color.LightGreen);
+            var snapshot = await _client.FetchAsync(settings, cancellation.Token);
+            if (generation != _generation || IsDisposed) return;
+            _snapshot = snapshot.Mode == "deepseek" && string.IsNullOrWhiteSpace(settings.PlatformToken)
+                ? snapshot : _tracker.Observe(snapshot, settings);
+            _lastUpdated = DateTime.Now;
+            _error = false;
+            _message = snapshot.Mode == "deepseek" ? "已读取余额。历史用量需要在设置里网页登录或填写 Usage 访问令牌。" : "";
+        }
+        catch (OperationCanceledException)
+        {
+            if (generation != _generation || IsDisposed) return;
+            _message = "刷新已超时，请检查网络或在设置中填写准确的 Usage 地址。";
+            _error = true;
         }
         catch (Exception error)
         {
-            SetStatus(error.Message, Color.Salmon);
+            if (generation != _generation || IsDisposed) return;
+            _message = error.Message;
+            _error = true;
+            if (error is UsageClient.RequestFailedException { IsUnauthorized: true }) _timer.Stop();
         }
         finally
         {
-            _isRefreshing = false;
+            if (ReferenceEquals(_refresh, cancellation)) _refresh = null;
+            if (!IsDisposed && generation == _generation) Render();
         }
     }
 
-    public void AllowClose()
+    private void SetInterval() => _timer.Interval = Math.Clamp(_settings.RefreshIntervalSeconds, 10, 3600) * 1000;
+    private void Render() => _dashboard.UpdateData(_snapshot, _message, _error, _refresh != null, _lastUpdated, _settings.RefreshIntervalSeconds);
+    internal void Preview(UsageSnapshot snapshot) { _snapshot = snapshot; _lastUpdated = DateTime.Now; _message = "预览示例数据"; Render(); }
+    public void AllowClose() { _allowClose = true; _generation++; _refresh?.Cancel(); }
+
+    private void UpdateRoundedCorners()
     {
-        _allowClose = true;
+        if (!IsHandleCreated || Width <= 0 || Height <= 0) return;
+        var diameter = Math.Min(48f * DeviceDpi / 96f, Math.Min(Width, Height));
+        using var outline = new GraphicsPath();
+        outline.AddArc(0, 0, diameter, diameter, 180, 90);
+        outline.AddArc(Width - diameter, 0, diameter, diameter, 270, 90);
+        outline.AddArc(Width - diameter, Height - diameter, diameter, diameter, 0, 90);
+        outline.AddArc(0, Height - diameter, diameter, diameter, 90, 90);
+        outline.CloseFigure();
+        var previous = Region;
+        Region = new Region(outline);
+        previous?.Dispose();
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        UpdateRoundedCorners();
+    }
+
+    private void CaptureBackdrop()
+    {
+        var next = Opacity > 0 ? FrostedBackdrop.Capture(Bounds, DeviceDpi / 96f) : null;
+        var previous = _backdrop;
+        _backdrop = next;
+        previous?.Dispose();
+        Invalidate(true);
+    }
+
+    private bool PaintBackdrop(Graphics graphics, Point offset)
+    {
+        if (_backdrop is null) return false;
+        graphics.DrawImage(_backdrop, new Rectangle(-offset.X, -offset.Y, ClientSize.Width, ClientSize.Height));
+        return true;
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        if (!PaintBackdrop(e.Graphics, Point.Empty)) base.OnPaintBackground(e);
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        _loaded = true;
+        CaptureBackdrop();
+    }
+
+    protected override void SetVisibleCore(bool value)
+    {
+        if (value && !Visible && _loaded) CaptureBackdrop();
+        base.SetVisibleCore(value);
+        if (!value) { _backdrop?.Dispose(); _backdrop = null; }
+    }
+
+    protected override void OnSizeChanged(EventArgs e)
+    {
+        base.OnSizeChanged(e);
+        UpdateRoundedCorners();
+    }
+
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        UpdateRoundedCorners();
+    }
+
+    protected override CreateParams CreateParams
+    {
+        get { var parameters = base.CreateParams; parameters.ClassStyle |= 0x20000; return parameters; }
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == Keys.Escape) { Hide(); return true; }
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        if (!_allowClose)
-        {
-            e.Cancel = true;
-            Hide();
-            return;
-        }
-
+        if (!_allowClose && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); return; }
         _timer.Stop();
+        _refresh?.Cancel();
         base.OnFormClosing(e);
     }
-
-    private void BuildInterface()
+    protected override void Dispose(bool disposing)
     {
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 4,
-            Padding = new Padding(18),
-            BackColor = BackColor
-        };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        Controls.Add(root);
-
-        var header = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            ColumnCount = 2,
-            AutoSize = true
-        };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var title = new Label
-        {
-            Text = "API 额度",
-            Font = new Font(Font, FontStyle.Bold),
-            AutoSize = true,
-            ForeColor = Color.White
-        };
-        var refreshButton = MakeButton("刷新");
-        refreshButton.Click += async (_, _) => await RefreshDataAsync();
-        header.Controls.Add(title, 0, 0);
-        header.Controls.Add(refreshButton, 1, 0);
-        root.Controls.Add(header, 0, 0);
-
-        root.Controls.Add(BuildSettingsPanel(), 0, 1);
-        root.Controls.Add(BuildMetricsPanel(), 0, 2);
-        root.Controls.Add(BuildDailyPanel(), 0, 3);
+        if (disposing) { _generation++; _refresh?.Cancel(); _timer.Dispose(); _tips.Dispose(); _settingsForm?.Dispose(); _backdrop?.Dispose(); _backdrop = null; }
+        base.Dispose(disposing);
     }
 
-    private Control BuildSettingsPanel()
+    private sealed class HeaderTitleLabel : Label
     {
-        var group = new GroupBox
+        protected override void OnPaint(PaintEventArgs e)
         {
-            Text = "连接设置",
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            ForeColor = Color.WhiteSmoke,
-            Padding = new Padding(12)
-        };
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 7,
-            AutoSize = true
-        };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        group.Controls.Add(layout);
-
-        AddRow(layout, 0, "Base URL", _baseUrlField);
-        _baseUrlField.Dock = DockStyle.Fill;
-        _baseUrlField.PlaceholderText = "https://your-api.example.com";
-
-        _providerField.DropDownStyle = ComboBoxStyle.DropDownList;
-        _providerField.Items.AddRange(["自动", "兼容接口", "OpenRouter", "DeepSeek"]);
-        _providerField.SelectedIndexChanged += (_, _) => UpdateProviderFieldState();
-        AddRow(layout, 1, "接口类型", _providerField);
-
-        _usagePathField.Dock = DockStyle.Fill;
-        _usagePathField.PlaceholderText = "/v1/usage";
-        AddRow(layout, 2, "Usage Path", _usagePathField);
-
-        var keyPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
-        keyPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        keyPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        _apiKeyField.Dock = DockStyle.Fill;
-        _apiKeyField.UseSystemPasswordChar = true;
-        var showKey = new CheckBox { Text = "显示", AutoSize = true, ForeColor = Color.WhiteSmoke };
-        showKey.CheckedChanged += (_, _) => _apiKeyField.UseSystemPasswordChar = !showKey.Checked;
-        keyPanel.Controls.Add(_apiKeyField, 0, 0);
-        keyPanel.Controls.Add(showKey, 1, 0);
-        AddRow(layout, 3, "API Key", keyPanel);
-
-        _platformTokenField.Dock = DockStyle.Fill;
-        _platformTokenField.UseSystemPasswordChar = true;
-        _platformTokenField.PlaceholderText = "供应商 Usage / 官网访问令牌（可选）";
-        AddRow(layout, 4, "Usage 访问令牌", _platformTokenField);
-
-        _intervalField.Minimum = 10;
-        _intervalField.Maximum = 3600;
-        _intervalField.Value = 30;
-        _intervalField.Width = 100;
-        AddRow(layout, 5, "刷新间隔", _intervalField);
-
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
-        var saveButton = MakeButton("保存并刷新");
-        saveButton.Click += async (_, _) =>
-        {
-            ApplyFields();
-            SettingsStore.Save(_settings);
-            _timer.Interval = Math.Max(10, _settings.RefreshIntervalSeconds) * 1000;
-            await RefreshDataAsync();
-        };
-        var clearButton = MakeButton("清除密钥");
-        clearButton.Click += (_, _) =>
-        {
-            _apiKeyField.Clear();
-            _platformTokenField.Clear();
-            _settings.ApiKey = "";
-            _settings.PlatformToken = "";
-            SettingsStore.Save(_settings);
-            SetStatus("已清除本机密钥。", Color.LightGreen);
-        };
-        actions.Controls.Add(saveButton);
-        actions.Controls.Add(clearButton);
-        var loginButton = MakeButton("网页登录并自动获取令牌");
-        loginButton.Click += async (_, _) => await OpenDashboardLoginAsync();
-        actions.Controls.Add(loginButton);
-        AddRow(layout, 6, "", actions);
-        return group;
-    }
-
-    private async Task OpenDashboardLoginAsync()
-    {
-        var host = _baseUrlField.Text.Trim();
-        var url = host.Contains("deepseek", StringComparison.OrdinalIgnoreCase)
-            ? "https://platform.deepseek.com/usage"
-            : (Uri.TryCreate(host, UriKind.Absolute, out var parsed) ? parsed.ToString() : "https://platform.openai.com");
-        using var loginWindow = new Form
-        {
-            Text = "网页登录（登录完成后自动同步用量）",
-            StartPosition = FormStartPosition.CenterParent,
-            Width = 1100,
-            Height = 760
-        };
-        var browser = new WebView2 { Dock = DockStyle.Fill };
-        loginWindow.Controls.Add(browser);
-        browser.NavigationCompleted += async (_, _) =>
-        {
-            try
-            {
-                var raw = await browser.CoreWebView2.ExecuteScriptAsync("(() => { const v = localStorage.getItem('userToken'); return v || ''; })()");
-                var value = JsonSerializer.Deserialize<string>(raw) ?? "";
-                if (string.IsNullOrWhiteSpace(value)) return;
-                using var tokenDoc = JsonDocument.Parse(value);
-                var token = tokenDoc.RootElement.ValueKind == JsonValueKind.Object && tokenDoc.RootElement.TryGetProperty("value", out var tokenValue)
-                    ? tokenValue.GetString()
-                    : value;
-                if (string.IsNullOrWhiteSpace(token)) return;
-                _platformTokenField.Text = token;
-                _settings.PlatformToken = token;
-                SettingsStore.Save(_settings);
-                SetStatus("已获取官网登录令牌，正在刷新官网用量。", Color.LightGreen);
-                await RefreshDataAsync();
-            }
-            catch (Exception error)
-            {
-                SetStatus($"网页登录令牌读取失败：{error.Message}", Color.Salmon);
-            }
-        };
-        loginWindow.Shown += async (_, _) =>
-        {
-            await browser.EnsureCoreWebView2Async();
-            browser.CoreWebView2.Navigate(url);
-        };
-        loginWindow.ShowDialog(this);
-    }
-
-    private Control BuildMetricsPanel()
-    {
-        var metrics = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            ColumnCount = 4,
-            RowCount = 2,
-            AutoSize = true,
-            Padding = new Padding(0, 14, 0, 8)
-        };
-        for (var index = 0; index < 4; index++)
-        {
-            metrics.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+            // Grayscale antialiasing avoids ClearType color fringes over live glass.
+            e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            using var brush = new SolidBrush(Color.White);
+            using var format = new StringFormat { LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap };
+            e.Graphics.DrawString(Text, Font, brush, ClientRectangle, format);
         }
-
-        AddMetric(metrics, 0, 0, "剩余", _balanceValue);
-        AddMetric(metrics, 1, 0, "今日", _todayValue);
-        AddMetric(metrics, 2, 0, "累计", _totalValue);
-        AddMetric(metrics, 3, 0, "今日请求", _requestsValue);
-        metrics.Controls.Add(_statusLabel, 0, 1);
-        metrics.SetColumnSpan(_statusLabel, 4);
-        _statusLabel.AutoSize = true;
-        _statusLabel.Padding = new Padding(2, 8, 2, 4);
-        _statusLabel.ForeColor = Color.LightGray;
-        return metrics;
-    }
-
-    private Control BuildDailyPanel()
-    {
-        var group = new GroupBox
-        {
-            Text = "每日使用",
-            Dock = DockStyle.Fill,
-            ForeColor = Color.WhiteSmoke,
-            Padding = new Padding(10)
-        };
-        _dailyList.Dock = DockStyle.Fill;
-        _dailyList.View = View.Details;
-        _dailyList.FullRowSelect = true;
-        _dailyList.GridLines = true;
-        _dailyList.BackColor = Color.FromArgb(49, 46, 44);
-        _dailyList.ForeColor = Color.WhiteSmoke;
-        _dailyList.Columns.Add("日期", 110);
-        _dailyList.Columns.Add("请求", 80);
-        _dailyList.Columns.Add("输入 Token", 130);
-        _dailyList.Columns.Add("输出 Token", 130);
-        _dailyList.Columns.Add("总 Token", 130);
-        _dailyList.Columns.Add("费用", 100);
-        group.Controls.Add(_dailyList);
-        return group;
-    }
-
-    private void LoadSettingsIntoFields()
-    {
-        _baseUrlField.Text = _settings.BaseUrl;
-        _apiKeyField.Text = _settings.ApiKey;
-        _platformTokenField.Text = _settings.PlatformToken;
-        _usagePathField.Text = _settings.UsagePath;
-        _intervalField.Value = Math.Clamp(_settings.RefreshIntervalSeconds, 10, 3600);
-        _providerField.SelectedIndex = _settings.ProviderPreset.Equals("compatible", StringComparison.OrdinalIgnoreCase)
-            ? 1
-            : _settings.ProviderPreset.Equals("openRouter", StringComparison.OrdinalIgnoreCase)
-                ? 2
-                : _settings.ProviderPreset.Equals("deepSeek", StringComparison.OrdinalIgnoreCase) ? 3 : 0;
-        UpdateProviderFieldState();
-    }
-
-    private void ApplyFields()
-    {
-        _settings.BaseUrl = _baseUrlField.Text.Trim();
-        _settings.ApiKey = _apiKeyField.Text.Trim();
-        _settings.PlatformToken = _platformTokenField.Text.Trim();
-        _settings.UsagePath = string.IsNullOrWhiteSpace(_usagePathField.Text)
-            ? "/v1/usage"
-            : NormalizePath(_usagePathField.Text);
-        _settings.RefreshIntervalSeconds = (int)_intervalField.Value;
-        _settings.ProviderPreset = _providerField.SelectedIndex switch
-        {
-            1 => "compatible",
-            2 => "openRouter",
-            3 => "deepSeek",
-            _ => "auto"
-        };
-    }
-
-    private void UpdateSnapshot(UsageSnapshot snapshot)
-    {
-        _balanceValue.Text = FormatAmount(snapshot.Balance, snapshot.Unit);
-        _todayValue.Text = FormatAmount(snapshot.TodayTokens ?? snapshot.TodayAmount, snapshot.Unit);
-        _totalValue.Text = FormatAmount(snapshot.TotalTokens ?? snapshot.TotalAmount, snapshot.Unit);
-        _requestsValue.Text = snapshot.TodayRequests?.ToString("N0") ?? "-";
-        _dailyList.Items.Clear();
-
-        foreach (var row in snapshot.DailyUsage)
-        {
-            var item = new ListViewItem(row.Date);
-            item.SubItems.Add(row.Requests?.ToString("N0") ?? "-");
-            item.SubItems.Add(row.InputTokens?.ToString("N0") ?? "-");
-            item.SubItems.Add(row.OutputTokens?.ToString("N0") ?? "-");
-            item.SubItems.Add(row.TotalTokens?.ToString("N0") ?? "-");
-            item.SubItems.Add(row.Cost?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "-");
-            _dailyList.Items.Add(item);
-        }
-    }
-
-    private static string NormalizePath(string value)
-    {
-        var result = value.Trim();
-        if (!result.StartsWith('/'))
-        {
-            result = "/" + result;
-        }
-
-        return result.TrimEnd('/');
-    }
-
-    private void UpdateProviderFieldState()
-    {
-        var isDeepSeek = _providerField.SelectedIndex == 3;
-        _usagePathField.Enabled = !isDeepSeek;
-        _usagePathField.PlaceholderText = isDeepSeek ? "/user/balance" : "/v1/usage";
-    }
-
-    private static string FormatAmount(double? value, string unit)
-    {
-        if (!value.HasValue)
-        {
-            return "-";
-        }
-
-        return unit.Equals("credits", StringComparison.OrdinalIgnoreCase)
-            ? value.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
-            : value.Value.ToString("N0");
-    }
-
-    private static void AddRow(TableLayoutPanel layout, int row, string label, Control control)
-    {
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.Controls.Add(new Label
-        {
-            Text = label,
-            AutoSize = true,
-            ForeColor = Color.Gainsboro,
-            Anchor = AnchorStyles.Left,
-            Padding = new Padding(0, 6, 8, 6)
-        }, 0, row);
-        layout.Controls.Add(control, 1, row);
-    }
-
-    private static void AddMetric(TableLayoutPanel layout, int column, int row, string title, Label value)
-    {
-        var panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(4) };
-        panel.Controls.Add(new Label
-        {
-            Text = title,
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            ForeColor = Color.Silver
-        });
-        panel.Controls.Add(value);
-        layout.Controls.Add(panel, column, row);
-    }
-
-    private static Label MetricValue()
-    {
-        return new Label
-        {
-            Text = "-",
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            Font = new Font("Segoe UI", 16, FontStyle.Bold),
-            ForeColor = Color.White
-        };
-    }
-
-    private static Button MakeButton(string text)
-    {
-        return new Button
-        {
-            Text = text,
-            AutoSize = true,
-            Padding = new Padding(8, 4, 8, 4),
-            FlatStyle = FlatStyle.System
-        };
-    }
-
-    private void SetStatus(string message, Color color)
-    {
-        _statusLabel.Text = message;
-        _statusLabel.ForeColor = color;
     }
 }

@@ -54,15 +54,11 @@ internal sealed class BalanceUsageTracker
             .Select(entry => new DailyUsageRow { Date = entry.Key, Cost = entry.Value })
             .ToList();
 
-        return new UsageSnapshot
+        return snapshot with
         {
-            Balance = snapshot.Balance,
             TodayAmount = state.DailySpent.GetValueOrDefault(today),
             TotalAmount = state.TotalSpent,
-            Unit = snapshot.Unit,
             Mode = string.IsNullOrWhiteSpace(snapshot.Mode) ? "compatible-local" : snapshot.Mode + "-local",
-            PlanName = snapshot.PlanName,
-            IsValid = snapshot.IsValid,
             DailyUsage = daily
         };
     }

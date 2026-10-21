@@ -18,7 +18,11 @@ internal sealed class QuotaApplicationContext : ApplicationContext
             Visible = true,
             ContextMenuStrip = BuildMenu()
         };
-        _trayIcon.DoubleClick += (_, _) => ShowMainWindow();
+        _trayIcon.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left) ShowMainWindow();
+        };
+        _mainForm.QuitRequested += (_, _) => ExitApplication();
         ShowMainWindow();
     }
 
@@ -39,6 +43,7 @@ internal sealed class QuotaApplicationContext : ApplicationContext
         var menu = new ContextMenuStrip();
         menu.Items.Add("打开", null, (_, _) => ShowMainWindow());
         menu.Items.Add("刷新", null, async (_, _) => await _mainForm.RefreshDataAsync());
+        menu.Items.Add("设置", null, (_, _) => { ShowMainWindow(); _mainForm.OpenSettings(); });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("退出", null, (_, _) => ExitApplication());
         return menu;
@@ -51,9 +56,7 @@ internal sealed class QuotaApplicationContext : ApplicationContext
             _mainForm.WindowState = FormWindowState.Normal;
         }
 
-        _mainForm.Show();
-        _mainForm.Activate();
-        _mainForm.BringToFront();
+        _mainForm.ShowAtTray();
     }
 
     private void ExitApplication()
