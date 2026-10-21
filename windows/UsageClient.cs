@@ -59,6 +59,7 @@ internal sealed class UsageClient
             }
             catch (RequestFailedException ex) when (index < endpoints.Count - 1)
             {
+                if (ex.IsUnauthorized) throw;
                 lastError = ex;
             }
             catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested && index < endpoints.Count - 1)
@@ -213,7 +214,7 @@ internal sealed class UsageClient
         var end = todayStart + day;
         var start = end - 30L * day;
         var query = $"start={start}&end={end}&tz={tz}";
-        var amount = await SendPlatformJsonAsync(
+        using var amount = await SendPlatformJsonAsync(
             new Uri($"https://platform.deepseek.com/api/v0/usage/by_api_key/amount?{query}"),
             platformToken,
             cancellationToken);
@@ -229,6 +230,8 @@ internal sealed class UsageClient
         {
             // Token usage remains useful if the optional cost endpoint changes.
         }
+
+        using var costDocument = cost;
 
         var rows = new Dictionary<string, PlatformAccumulator>(StringComparer.Ordinal);
         var amountData = GetObject(GetObject(amount.RootElement, "data"), "biz_data", "bizData") ??
@@ -280,7 +283,7 @@ internal sealed class UsageClient
                         var value = GetNumber(bucket, "cost", "amount");
                         if (date is null || !value.HasValue) continue;
                         if (!rows.TryGetValue(date, out var row)) row = new PlatformAccumulator();
-                        row.Cost += value.Value;
+                        row.Cost = (row.Cost ?? 0) + value.Value;
                         rows[date] = row;
                     }
                 }
@@ -299,7 +302,7 @@ internal sealed class UsageClient
             total.TotalTokens += row.TotalTokens;
             total.Requests += row.Requests;
             total.CacheReadTokens += row.CacheReadTokens;
-            total.Cost += row.Cost;
+            if (row.Cost is { } costValue) total.Cost = (total.Cost ?? 0) + costValue;
         }
         var daily = rows.OrderByDescending(item => item.Key).Take(90).Select(item => new DailyUsageRow
         {
@@ -307,6 +310,7 @@ internal sealed class UsageClient
             Requests = item.Value.Requests,
             InputTokens = item.Value.InputTokens,
             OutputTokens = item.Value.OutputTokens,
+            CacheReadTokens = item.Value.CacheReadTokens,
             TotalTokens = item.Value.TotalTokens,
             Cost = item.Value.Cost
         }).ToList();
@@ -317,10 +321,14 @@ internal sealed class UsageClient
             TotalAmount = total.Cost,
             TodayTokens = todayRow.TotalTokens,
             TotalTokens = total.TotalTokens,
+            TotalInputTokens = total.InputTokens,
+            TotalOutputTokens = total.OutputTokens,
+            CacheReadTokens = total.CacheReadTokens,
             TodayRequests = todayRow.Requests,
             TotalRequests = total.Requests,
             Unit = balance.Unit,
             Mode = "deepseek-platform",
+            PeriodNote = "官网同步：累计数据来自最近 30 天的用量记录。",
             PlanName = "DeepSeek API（官网同步）",
             IsValid = balance.IsValid,
             DailyUsage = daily
@@ -371,11 +379,11 @@ internal sealed class UsageClient
         public double TotalTokens;
         public double Requests;
         public double CacheReadTokens;
-        public double Cost;
+        public double? Cost;
     }
 
 
-    private static bool TryCreateBaseUri(string raw, out Uri baseUri)
+    internal static bool TryCreateBaseUri(string raw, out Uri baseUri)
     {
         var value = raw.Trim();
         value = string.Concat(value.Where(character => !char.IsWhiteSpace(character) && !char.IsControl(character)));
@@ -516,6 +524,7 @@ internal sealed class UsageClient
     private static string NormalizePath(string raw)
     {
         var path = string.IsNullOrWhiteSpace(raw) ? "/v1/usage" : raw.Trim();
+        if (Uri.TryCreate(path, UriKind.Absolute, out var absolute) && absolute.Scheme is "http" or "https") return path;
         if (!path.StartsWith('/'))
         {
             path = "/" + path;
@@ -575,13 +584,13 @@ internal sealed class UsageClient
         return new UriBuilder(baseUri) { Path = path + "/key" }.Uri;
     }
 
-    private static UsageSnapshot ParseOpenRouter(JsonElement root)
+    internal static UsageSnapshot ParseOpenRouter(JsonElement root)
     {
         var data = GetObject(root, "data") ?? root;
         var limit = GetNumber(data, "limit");
         var remaining = GetNumber(data, "limit_remaining", "limitRemaining");
-        var total = GetNumber(data, "usage") ?? 0;
-        var today = GetNumber(data, "usage_daily", "usageDaily") ?? total;
+        var total = GetNumber(data, "usage", "byok_usage") ?? 0;
+        var today = GetNumber(data, "usage_daily", "usageDaily", "byok_usage_daily") ?? total;
         var used = limit.HasValue && remaining.HasValue
             ? Math.Max(limit.Value - remaining.Value, 0)
             : total;
@@ -594,11 +603,14 @@ internal sealed class UsageClient
             Unit = "credits",
             Mode = "openrouter",
             PlanName = GetString(data, "label") ?? "OpenRouter",
-            IsValid = true
+            IsValid = true,
+            Quota = new QuotaSummary(limit, used, remaining),
+            RateLimits = limit.HasValue ? [new RateLimitRow(GetString(data, "limit_reset") ?? "key", limit, used, null)] : [],
+            DailyUsage = [new DailyUsageRow { Date = DateTime.Now.ToString("yyyy-MM-dd"), Cost = today }]
         };
     }
 
-    private static UsageSnapshot ParseCompatible(JsonElement root)
+    internal static UsageSnapshot ParseCompatible(JsonElement root)
     {
         var data = LooksLikeUsage(root)
             ? root
@@ -658,17 +670,35 @@ internal sealed class UsageClient
             TodayTokens = todayTokens ?? derivedToday.TotalTokens,
             TotalTokens = totalTokens ?? derivedTotal.TotalTokens,
             TodayRequests = today is { } todayRequests
-                ? GetNumber(todayRequests, "requests", "request_count", "requests_count", "num_model_requests", "api_calls", "calls")
+                ? GetNumber(todayRequests, "requests", "request_count", "requests_count", "num_model_requests", "api_calls", "calls") ?? derivedToday.Requests
                 : derivedToday.Requests,
             TotalRequests = total is { } totalRequests
-                ? GetNumber(totalRequests, "requests", "request_count", "requests_count", "num_model_requests", "api_calls", "calls")
+                ? GetNumber(totalRequests, "requests", "request_count", "requests_count", "num_model_requests", "api_calls", "calls") ?? derivedTotal.Requests
                 : derivedTotal.Requests,
             Unit = GetString(data, "unit", "currency", "currency_code") ?? "",
             Mode = GetString(data, "mode", "provider", "provider_name") ?? "",
             PlanName = GetString(data, "plan_name", "planName", "plan", "label") ?? "兼容接口",
             IsValid = GetBool(data, "is_valid", "isValid", "valid", "available", "is_available"),
+            TotalInputTokens = ReadCounter(total, "input_tokens", "inputTokens", "prompt_tokens") ?? derivedTotal.InputTokens,
+            TotalOutputTokens = ReadCounter(total, "output_tokens", "outputTokens", "completion_tokens") ?? derivedTotal.OutputTokens,
+            CacheCreationTokens = ReadCounter(total, "cache_creation_tokens", "cacheCreationTokens", "cache_write_tokens", "cacheWriteTokens") ?? derivedTotal.CacheCreationTokens,
+            CacheReadTokens = ReadCounter(total, "cache_read_tokens", "cacheReadTokens", "cached_tokens") ?? derivedTotal.CacheReadTokens,
+            Quota = quota is { } q ? new QuotaSummary(GetNumber(q, "limit", "total", "maximum", "credit_limit"),
+                GetNumber(q, "used", "usage", "consumed", "spent"), GetNumber(q, "remaining", "balance", "available")) : null,
+            RateLimits = ParseLimits(data),
             DailyUsage = dailyRows
         };
+    }
+
+    private static double? ReadCounter(JsonElement? value, params string[] keys) => value is { } v ? GetNumber(v, keys) : null;
+
+    private static List<RateLimitRow> ParseLimits(JsonElement data)
+    {
+        var rows = GetArray(data, "rate_limits", "rateLimits");
+        if (rows is null) return [];
+        return rows.Value.EnumerateArray().Where(r => r.ValueKind == JsonValueKind.Object)
+            .Select(r => new RateLimitRow(GetString(r, "window") ?? "", GetNumber(r, "limit"), GetNumber(r, "used"), GetString(r, "reset_at", "resetAt")))
+            .Where(r => r.Window.Length > 0).ToList();
     }
 
     private static DailyUsageRow AggregateDaily(IEnumerable<DailyUsageRow> rows)
@@ -679,6 +709,8 @@ internal sealed class UsageClient
             Requests = list.Any(row => row.Requests.HasValue) ? list.Sum(row => row.Requests ?? 0) : null,
             InputTokens = list.Any(row => row.InputTokens.HasValue) ? list.Sum(row => row.InputTokens ?? 0) : null,
             OutputTokens = list.Any(row => row.OutputTokens.HasValue) ? list.Sum(row => row.OutputTokens ?? 0) : null,
+            CacheCreationTokens = list.Any(row => row.CacheCreationTokens.HasValue) ? list.Sum(row => row.CacheCreationTokens ?? 0) : null,
+            CacheReadTokens = list.Any(row => row.CacheReadTokens.HasValue) ? list.Sum(row => row.CacheReadTokens ?? 0) : null,
             TotalTokens = list.Any(row => row.TotalTokens.HasValue) ? list.Sum(row => row.TotalTokens ?? 0) : null,
             Cost = list.Any(row => row.Cost.HasValue) ? list.Sum(row => row.Cost ?? 0) : null
         };
@@ -707,11 +739,13 @@ internal sealed class UsageClient
                 InputTokens = GetNumber(item, "input_tokens", "inputTokens", "prompt_tokens", "prompt_token_count", "input_token_count"),
                 OutputTokens = GetNumber(item, "output_tokens", "outputTokens", "completion_tokens", "generated_tokens", "output_token_count"),
                 TotalTokens = GetNumber(item, "total_tokens", "totalTokens", "tokens", "token_count", "total_token_count", "tokens_used"),
+                CacheCreationTokens = GetNumber(item, "cache_creation_tokens", "cache_write_tokens"),
+                CacheReadTokens = GetNumber(item, "cache_read_tokens", "cached_tokens"),
                 Cost = GetNumber(item, "actual_cost", "actualCost", "cost", "amount", "spent")
             });
         }
 
-        return rows.OrderByDescending(row => row.Date).Take(7).ToList();
+        return rows.OrderByDescending(row => row.Date).ToList();
     }
 
     private static bool LooksLikeUsage(JsonElement value)
@@ -729,6 +763,7 @@ internal sealed class UsageClient
                    "available_balance",
                    "available_credit",
                    "quota",
+                    "rate_limits",
                    "usage",
                    "daily_usage",
                    "dailyUsage",
@@ -811,7 +846,7 @@ internal sealed class UsageClient
         ) ? parsed : null;
     }
 
-    private sealed class RequestFailedException : InvalidOperationException
+    internal sealed class RequestFailedException : InvalidOperationException
     {
         public RequestFailedException(int? statusCode, string message, Exception? innerException = null)
             : base(message, innerException)
