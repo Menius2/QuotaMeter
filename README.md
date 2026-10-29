@@ -1,12 +1,18 @@
 # QuotaMeter
 
-QuotaMeter 是一个桌面额度监控工具，用来查看 API 中转余额、Token 用量、每日使用记录和限额。
-当前版本：**v1.1.2**
-项目提供 macOS 菜单栏版本和 Windows 系统托盘版本。
+QuotaMeter 是一个额度监控工具，用来查看 API 中转余额、Token 用量、每日使用记录和限额。
+
+当前版本：**桌面版 v1.1.2 · iOS 版 v1.2.5**
+
+项目提供三个版本：
+
+- **macOS** — 菜单栏常驻
+- **Windows** — 系统托盘常驻
+- **iOS** — iPhone 应用，底部「额度 / 平台 / 我的」三 Tab
 
 ## 功能
 
-- 菜单栏常驻，点击即可展开详情
+- 常驻入口，点击即可展开详情（桌面版为菜单栏 / 托盘，iOS 版为三 Tab）
 - 实时轮询刷新余额与用量
 - 显示今日 / 累计 token、请求数、费用
 - 显示每日使用记录
@@ -19,16 +25,20 @@ QuotaMeter 是一个桌面额度监控工具，用来查看 API 中转余额、T
 - 支持自定义 `Usage Path`
 - 自动探测常见的 `/v1/usage`、`/usage`、`/api/usage`、`/user/usage`、`/account/usage`、`/billing/usage`、`/balance` 和 `/user/balance` 路径
 - 对仅提供余额接口的供应商，可记录本机首次成功刷新之后观测到的余额消耗（不会伪造成 token 或请求数）
-- 密钥保存到本机 Keychain
-- 可选读取本地 `config.json`
+- 密钥保存到本机 Keychain（Windows 使用 DPAPI）
+- 可选读取本地 `config.json`（仅桌面版）
+
+iOS 版另外提供：最近 10 天用量柱状图、平台卡片一键跳转 Safari、浅色 / 深色外观切换、多 API 胶囊切换。详见 [ios/README.md](./ios/README.md)。
 
 ## 支持平台
 
-- macOS 13 或更高版本
-- Apple Silicon / Intel
-- 建议使用 Xcode 15+ 或已安装 Command Line Tools
-- Windows 10 / 11
-- Windows 版本使用 .NET 8 WinForms，并通过 Windows DPAPI 保护本机 API Key
+| 平台 | 最低版本 | 形态 | 凭据存储 | 分发 |
+| --- | --- | --- | --- | --- |
+| macOS | macOS 13，Apple Silicon / Intel | 菜单栏 | Keychain | DMG |
+| Windows | Windows 10 / 11，.NET 8 WinForms | 系统托盘 | DPAPI | EXE |
+| iOS | iOS 17.0+，iPhone 竖屏 | 三 Tab | Keychain | 未签名 IPA |
+
+macOS 建议使用 Xcode 15+ 或已安装 Command Line Tools。
 
 ## 安装
 
@@ -38,8 +48,24 @@ QuotaMeter 是一个桌面额度监控工具，用来查看 API 中转余额、T
 
 - macOS：下载对应 Release 中的 `QuotaMeter-macOS-v1.1.2.dmg`
 - Windows：下载对应 Release 中的 `QuotaMeter-Windows-v1.1.2.exe`
+- iOS：下载 [iOS Release](https://github.com/Menius2/QuotaMeter/releases/tag/ios-v1.2.5) 中的 `QuotaMeter-iOS-v1.2.5-unsigned.ipa`
 
-### 方式一：从源码构建
+### iOS 版安装
+
+iOS 版本是**未签名 IPA**（开源项目没有 Apple 开发者证书），不能直接双击安装，需要用自己的证书重签或用自签工具侧载：
+
+| 方式 | 说明 |
+| --- | --- |
+| Sideloadly | Windows / macOS 均可，用免费 Apple ID 签名后安装到手机，有效期 7 天 |
+| AltStore / SideStore | 手机上自签，需要一台电脑完成首次配对 |
+| TrollStore | 仅限支持的系统版本，签一次长期有效 |
+| Xcode | 打开 `ios/QuotaMeter.xcodeproj`，用自己的 Team 签名后真机运行 |
+
+安装后在 `设置 → 通用 → VPN 与设备管理` 中信任对应证书。
+
+也可以直接使用仓库内的 `ios/QuotaMeter-iOS-v1.2.5-unsigned.ipa`，或从 `ios/` 目录自行构建，详见 [ios/README.md](./ios/README.md)。
+
+### 方式一：从源码构建（macOS）
 
 ```bash
 bash build.sh
@@ -79,15 +105,35 @@ API Key 使用当前 Windows 用户的 DPAPI 加密保存。不要把这个文�
 
 仓库中的 `.github/workflows/release.yml` 会在推送 `v*` 标签时自动构建 macOS DMG 和 Windows `win-x64` 单文件 EXE，并更新对应的 GitHub Release。
 
+### iOS 版本
+
+iOS 工程已附带可直接打开的 `ios/QuotaMeter.xcodeproj`（objectVersion 56，兼容 Xcode 14+），用 Xcode 打开选择自己的 Team 即可真机运行：
+
+```bash
+cd ios && open QuotaMeter.xcodeproj
+```
+
+`ios/project.yml` 是 [XcodeGen](https://github.com/yonaskolb/XcodeGen) 配置源，仅在改动工程结构时重新生成（xcodegen 2.46+ 会输出需要 Xcode 16+ 的新格式）。命令行构建未签名真机包的完整步骤见 [ios/README.md](./ios/README.md)。
+
 ## 使用步骤
 
+### 桌面版
+
 1. 打开 QuotaMeter
-2. 点击菜单栏图标
+2. 点击菜单栏 / 托盘图标
 3. 打开设置窗口
 4. 填写 `Base URL`
 5. 填写 `API Key`
 6. 需要时选择接口类型和 `Usage Path`
 7. 点击“保存并刷新”
+
+### iOS 版
+
+1. 打开 QuotaMeter，进入「额度」页
+2. 点右上角 `+`，选择平台（DeepSeek / OpenAI 兼容等）
+3. 填写 `Base URL`、`Usage Path`、`API Key`，需要时用「网页登录获取令牌」补充官网访问令牌
+4. 点「保存 API」，回到额度页即开始轮询（默认 30 秒）
+5. 在「平台」页可跳转官网，「我的」页可切换 API 与外观模式
 
 ### 适配器工作方式
 
@@ -123,7 +169,17 @@ xattr -dr com.apple.quarantine build/QuotaMeter.app
 
 ## 截图
 
-项目截图：
+### iOS
+
+| 概览 | 用量 | 添加 API |
+| --- | --- | --- |
+| ![iOS 概览](./screenshots/ios/ios-01-overview.jpg) | ![iOS 用量](./screenshots/ios/ios-02-usage.jpg) | ![iOS 添加 API](./screenshots/ios/ios-03-add-api.jpg) |
+
+| 平台 | 我的 |
+| --- | --- |
+| ![iOS 平台](./screenshots/ios/ios-04-platforms.jpg) | ![iOS 我的](./screenshots/ios/ios-05-me.jpg) |
+
+### macOS
 
 ![QuotaMeter 主界面](./screenshots/main.png)
 
@@ -131,18 +187,44 @@ xattr -dr com.apple.quarantine build/QuotaMeter.app
 
 如果要补充错误状态截图，可放入 `screenshots/error.png`。
 
+## 仓库结构
+
+```text
+.
+├── QuotaMeter.swift          # macOS 版本源码
+├── windows/                  # Windows 版本源码（.NET 8 WinForms）
+├── ios/                      # iOS 版本源码 + 未签名 IPA
+├── screenshots/              # 截图（ios/ 子目录为 iPhone 截图）
+├── .github/workflows/        # 桌面版发布流水线
+└── build.sh                  # macOS 构建脚本
+```
+
 ## 安全说明
 
-- API Key 默认保存在本机 Keychain
-- Windows 版本使用当前用户 DPAPI 加密保存 API Key
+- API Key 默认保存在本机 Keychain；Windows 版本使用当前用户 DPAPI 加密
+- iOS 版本不同账户的 API Key、平台令牌、刷新设置与反馈内容互相隔离
 - 不会额外启动后台 Helper 或登录项
 - 退出 App 后，状态栏图标和轮询都会结束
 - `config.json` 不要提交到仓库
+- iOS 版通过系统 Safari 打开平台页面，App 内不注入网页脚本
 
 ## 开发说明
+
+macOS：
 
 ```bash
 bash build.sh
 ```
 
 构建产物会输出到 `build/QuotaMeter.app`。
+
+iOS：
+
+```bash
+cd ios
+xcodebuild -project QuotaMeter.xcodeproj -scheme QuotaMeter -sdk iphoneos -configuration Release CODE_SIGNING_ALLOWED=NO
+```
+
+## 许可证
+
+见 [LICENSE](./LICENSE)。
