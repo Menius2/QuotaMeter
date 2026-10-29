@@ -10,6 +10,8 @@ DerivedData/
 *.app
 *.dSYM
 *.ipa
+# iOS 发行用的未签名 IPA 随仓库分发，单独放行（否则上面的 *.ipa 会挡掉）
+!ios/*.ipa
 *.pkg
 *.xcarchive
 

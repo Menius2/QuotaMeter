@@ -1,0 +1,526 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	compatibilityVersion = "Xcode 14.0";
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1D5B831CB40981038FB431D3 /* UsageParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF5EB59A648BD2275FBB0121 /* UsageParsingTests.swift */; };
+		2AA2EFE2F1B1E32729E650C3 /* QuotaMeterUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCAAF65B0D4FB554FD716C88 /* QuotaMeterUITests.swift */; };
+		48988C3E94AD0522947EF9B3 /* QuotaMeteriOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C54E6E54658F49C0595AE1 /* QuotaMeteriOS.swift */; };
+		5674E480F5514974508F6D4A /* QuotaMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 646A5B0FDDF8AD4A58952932 /* QuotaMeter.swift */; };
+		9EDA4466C19A0D9130FC164A /* app-icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 6D6D633B2C74AB91FE8CEC38 /* app-icon.png */; };
+		B4CFE542AB7E25D2D14CB4F6 /* QuotaMeterV2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16BF1779F4FAF5F643298860 /* QuotaMeterV2.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		7EAAC64D400C44997BB3E6F7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 354547C8F891899B82335FF3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 690E1AEDB7C3E97858D91895;
+			remoteInfo = QuotaMeter;
+		};
+		934A7FE888A6E99EDEF8EBBE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 354547C8F891899B82335FF3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 690E1AEDB7C3E97858D91895;
+			remoteInfo = QuotaMeter;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0D341F155F952F794FC3164B /* QuotaMeterUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = QuotaMeterUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		11C54E6E54658F49C0595AE1 /* QuotaMeteriOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaMeteriOS.swift; sourceTree = "<group>"; };
+		16BF1779F4FAF5F643298860 /* QuotaMeterV2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaMeterV2.swift; sourceTree = "<group>"; };
+		646A5B0FDDF8AD4A58952932 /* QuotaMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaMeter.swift; sourceTree = "<group>"; };
+		64FCF3D06C55CC96B81B7F6B /* QuotaMeter.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = QuotaMeter.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6D6D633B2C74AB91FE8CEC38 /* app-icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "app-icon.png"; sourceTree = "<group>"; };
+		737853952BDD0D6ADDAF20E6 /* QuotaMeterTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = QuotaMeterTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DF5EB59A648BD2275FBB0121 /* UsageParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageParsingTests.swift; sourceTree = "<group>"; };
+		FCAAF65B0D4FB554FD716C88 /* QuotaMeterUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaMeterUITests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		18BCCD8AB8EFED0496E72F0B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				64FCF3D06C55CC96B81B7F6B /* QuotaMeter.app */,
+				737853952BDD0D6ADDAF20E6 /* QuotaMeterTests.xctest */,
+				0D341F155F952F794FC3164B /* QuotaMeterUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3BEF99E5B6A44BF99A2355BE /* assets */ = {
+			isa = PBXGroup;
+			children = (
+				6D6D633B2C74AB91FE8CEC38 /* app-icon.png */,
+			);
+			path = assets;
+			sourceTree = "<group>";
+		};
+		4E8969F7B176AEDAF93E90B0 /* QuotaMeterTests */ = {
+			isa = PBXGroup;
+			children = (
+				DF5EB59A648BD2275FBB0121 /* UsageParsingTests.swift */,
+			);
+			path = QuotaMeterTests;
+			sourceTree = "<group>";
+		};
+		BC55A78099AACE09FF5B8E0A /* QuotaMeterUITests */ = {
+			isa = PBXGroup;
+			children = (
+				FCAAF65B0D4FB554FD716C88 /* QuotaMeterUITests.swift */,
+			);
+			path = QuotaMeterUITests;
+			sourceTree = "<group>";
+		};
+		BFE67CDC4FEF51B784A4AFD8 = {
+			isa = PBXGroup;
+			children = (
+				646A5B0FDDF8AD4A58952932 /* QuotaMeter.swift */,
+				11C54E6E54658F49C0595AE1 /* QuotaMeteriOS.swift */,
+				16BF1779F4FAF5F643298860 /* QuotaMeterV2.swift */,
+				3BEF99E5B6A44BF99A2355BE /* assets */,
+				4E8969F7B176AEDAF93E90B0 /* QuotaMeterTests */,
+				BC55A78099AACE09FF5B8E0A /* QuotaMeterUITests */,
+				18BCCD8AB8EFED0496E72F0B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		36A25F303D126BB25C20565C /* QuotaMeterUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3AEBB0409EA8026CE8AF9775 /* Build configuration list for PBXNativeTarget "QuotaMeterUITests" */;
+			buildPhases = (
+				BF8A4BC26046E1E0D8B36F0D /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BDF385D4274EBCBE9D98ECA1 /* PBXTargetDependency */,
+			);
+			name = QuotaMeterUITests;
+			packageProductDependencies = (
+			);
+			productName = QuotaMeterUITests;
+			productReference = 0D341F155F952F794FC3164B /* QuotaMeterUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		690E1AEDB7C3E97858D91895 /* QuotaMeter */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2FCAD2390B7502FAFB069605 /* Build configuration list for PBXNativeTarget "QuotaMeter" */;
+			buildPhases = (
+				B9AAAA4011742A24E0C0ACC3 /* Sources */,
+				812F08ECC0D722757E25ABD5 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = QuotaMeter;
+			packageProductDependencies = (
+			);
+			productName = QuotaMeter;
+			productReference = 64FCF3D06C55CC96B81B7F6B /* QuotaMeter.app */;
+			productType = "com.apple.product-type.application";
+		};
+		F95AB7E185669F1D13EA89EA /* QuotaMeterTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6C7B928DAB975D51B4177941 /* Build configuration list for PBXNativeTarget "QuotaMeterTests" */;
+			buildPhases = (
+				8DEA31B1ED0BB97251DA8FA4 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				64140D274CA1D01778727CBB /* PBXTargetDependency */,
+			);
+			name = QuotaMeterTests;
+			packageProductDependencies = (
+			);
+			productName = QuotaMeterTests;
+			productReference = 737853952BDD0D6ADDAF20E6 /* QuotaMeterTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		354547C8F891899B82335FF3 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1540;
+				TargetAttributes = {
+					36A25F303D126BB25C20565C = {
+						TestTargetID = 690E1AEDB7C3E97858D91895;
+					};
+					690E1AEDB7C3E97858D91895 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 9ADDE5F4F4810D8748D0A447 /* Build configuration list for PBXProject "QuotaMeter" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = BFE67CDC4FEF51B784A4AFD8;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 18BCCD8AB8EFED0496E72F0B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				690E1AEDB7C3E97858D91895 /* QuotaMeter */,
+				36A25F303D126BB25C20565C /* QuotaMeterUITests */,
+				F95AB7E185669F1D13EA89EA /* QuotaMeterTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		812F08ECC0D722757E25ABD5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9EDA4466C19A0D9130FC164A /* app-icon.png in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8DEA31B1ED0BB97251DA8FA4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D5B831CB40981038FB431D3 /* UsageParsingTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B9AAAA4011742A24E0C0ACC3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5674E480F5514974508F6D4A /* QuotaMeter.swift in Sources */,
+				B4CFE542AB7E25D2D14CB4F6 /* QuotaMeterV2.swift in Sources */,
+				48988C3E94AD0522947EF9B3 /* QuotaMeteriOS.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BF8A4BC26046E1E0D8B36F0D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2AA2EFE2F1B1E32729E650C3 /* QuotaMeterUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		64140D274CA1D01778727CBB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 690E1AEDB7C3E97858D91895 /* QuotaMeter */;
+			targetProxy = 7EAAC64D400C44997BB3E6F7 /* PBXContainerItemProxy */;
+		};
+		BDF385D4274EBCBE9D98ECA1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 690E1AEDB7C3E97858D91895 /* QuotaMeter */;
+			targetProxy = 934A7FE888A6E99EDEF8EBBE /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		00614D73C09C8EBA0C31244E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.codex.quotameter.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = QuotaMeter;
+			};
+			name = Debug;
+		};
+		22FD080C2964E6D9D6A10AA1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		266F11588A52280D3D385F51 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.codex.quotameter.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QuotaMeter.app/QuotaMeter";
+			};
+			name = Release;
+		};
+		3004C0B916B909ED91852259 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = QuotaMeter;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.2.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.codex.quotameter;
+				PRODUCT_NAME = QuotaMeter;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		9AD9B965A05CB009AD463656 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		C8E9BEF8CCC48A681B7FCE8E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.codex.quotameter.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = QuotaMeter;
+			};
+			name = Release;
+		};
+		DBB70020CBCFC517AC746CBF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = QuotaMeter;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.2.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.codex.quotameter;
+				PRODUCT_NAME = QuotaMeter;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		EA055EF0FDC3EF1637EBE72C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.codex.quotameter.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QuotaMeter.app/QuotaMeter";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2FCAD2390B7502FAFB069605 /* Build configuration list for PBXNativeTarget "QuotaMeter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3004C0B916B909ED91852259 /* Debug */,
+				DBB70020CBCFC517AC746CBF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3AEBB0409EA8026CE8AF9775 /* Build configuration list for PBXNativeTarget "QuotaMeterUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00614D73C09C8EBA0C31244E /* Debug */,
+				C8E9BEF8CCC48A681B7FCE8E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6C7B928DAB975D51B4177941 /* Build configuration list for PBXNativeTarget "QuotaMeterTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EA055EF0FDC3EF1637EBE72C /* Debug */,
+				266F11588A52280D3D385F51 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9ADDE5F4F4810D8748D0A447 /* Build configuration list for PBXProject "QuotaMeter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				22FD080C2964E6D9D6A10AA1 /* Debug */,
+				9AD9B965A05CB009AD463656 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 354547C8F891899B82335FF3 /* Project object */;
+}

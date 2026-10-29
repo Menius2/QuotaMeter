@@ -1,0 +1,71 @@
+name: QuotaMeter
+options:
+  bundleIdPrefix: com.codex
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "15.4"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+targets:
+  QuotaMeter:
+    type: application
+    platform: iOS
+    sources:
+      - path: QuotaMeter.swift
+      - path: QuotaMeteriOS.swift
+      - path: QuotaMeterV2.swift
+      - path: assets/app-icon.png
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.codex.quotameter
+        PRODUCT_NAME: QuotaMeter
+        MARKETING_VERSION: 1.2.5
+        CURRENT_PROJECT_VERSION: 1
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: QuotaMeter
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads: YES
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        ENABLE_PREVIEWS: YES
+  QuotaMeterUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: QuotaMeterUITests
+    dependencies:
+      - target: QuotaMeter
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.codex.quotameter.uitests
+        TEST_TARGET_NAME: QuotaMeter
+  QuotaMeterTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: QuotaMeterTests
+    dependencies:
+      - target: QuotaMeter
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.codex.quotameter.tests
+schemes:
+  QuotaMeter:
+    build:
+      targets:
+        QuotaMeter: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - QuotaMeterTests
+        - QuotaMeterUITests
+    archive:
+      config: Release
